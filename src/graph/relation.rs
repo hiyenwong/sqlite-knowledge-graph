@@ -54,7 +54,7 @@ impl Relation {
 }
 
 /// Represents a neighbor in a graph traversal.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Neighbor {
     pub entity: Entity,
     pub relation: Relation,

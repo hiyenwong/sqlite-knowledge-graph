@@ -5,20 +5,46 @@
 //! - Relations between entities with weights
 //! - Vector embeddings for semantic search
 //! - Custom SQLite functions for direct SQL operations
+//! - RAG (Retrieval-Augmented Generation) query functions
 
 pub mod error;
 pub mod functions;
 pub mod graph;
+pub mod migrate;
 pub mod schema;
 pub mod vector;
 
 pub use error::{Error, Result};
 pub use functions::register_functions;
 pub use graph::{Entity, Neighbor, Relation};
+pub use migrate::{migrate_papers, migrate_skills, build_relationships, migrate_all, MigrationStats};
 pub use schema::{create_schema, schema_exists};
 pub use vector::{SearchResult, VectorStore, cosine_similarity};
 
 use rusqlite::Connection;
+use serde::{Serialize, Deserialize};
+
+/// Semantic search result with entity information.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchResultWithEntity {
+    pub entity: Entity,
+    pub similarity: f32,
+}
+
+/// Graph context for an entity (root + neighbors).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphContext {
+    pub root_entity: Entity,
+    pub neighbors: Vec<Neighbor>,
+}
+
+/// Hybrid search result combining semantic similarity and graph context.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HybridSearchResult {
+    pub entity: Entity,
+    pub similarity: f32,
+    pub context: Option<GraphContext>,
+}
 
 /// Knowledge Graph Manager - main entry point for the library.
 #[derive(Debug)]
@@ -120,6 +146,62 @@ impl KnowledgeGraph {
     pub fn search_vectors(&self, query: Vec<f32>, k: usize) -> Result<Vec<SearchResult>> {
         let store = VectorStore::new();
         store.search_vectors(&self.conn, query, k)
+    }
+
+    // ========== RAG Query Functions ==========
+
+    /// Semantic search using vector embeddings.
+    /// Returns entities sorted by similarity score.
+    pub fn kg_semantic_search(&self, query_embedding: Vec<f32>, k: usize) -> Result<Vec<SearchResultWithEntity>> {
+        let results = self.search_vectors(query_embedding, k)?;
+
+        let mut entities_with_results = Vec::new();
+        for result in results {
+            let entity = self.get_entity(result.entity_id)?;
+            entities_with_results.push(SearchResultWithEntity {
+                entity,
+                similarity: result.similarity,
+            });
+        }
+
+        Ok(entities_with_results)
+    }
+
+    /// Get context around an entity using graph traversal.
+    /// Returns neighbors up to the specified depth.
+    pub fn kg_get_context(&self, entity_id: i64, depth: u32) -> Result<GraphContext> {
+        let root_entity = self.get_entity(entity_id)?;
+        let neighbors = self.get_neighbors(entity_id, depth)?;
+
+        Ok(GraphContext {
+            root_entity,
+            neighbors,
+        })
+    }
+
+    /// Hybrid search combining semantic search and graph context.
+    /// Performs semantic search first, then retrieves context for top-k results.
+    pub fn kg_hybrid_search(
+        &self,
+        _query_text: &str,
+        query_embedding: Vec<f32>,
+        k: usize,
+    ) -> Result<Vec<HybridSearchResult>> {
+        let semantic_results = self.kg_semantic_search(query_embedding, k)?;
+
+        let mut hybrid_results = Vec::new();
+        for result in semantic_results.iter() {
+            let entity_id = result.entity.id.ok_or(Error::EntityNotFound(0))?;
+            let context = self.kg_get_context(entity_id, 1)?; // Depth 1 context
+
+            hybrid_results.push(HybridSearchResult {
+                entity: result.entity.clone(),
+                similarity: result.similarity,
+                context: Some(context),
+            });
+        }
+
+        Ok(hybrid_results)
     }
 }
 

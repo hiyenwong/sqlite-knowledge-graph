@@ -12,6 +12,9 @@ pub enum Error {
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
     #[error("Entity not found: {0}")]
     EntityNotFound(i64),
 
@@ -32,4 +35,7 @@ pub enum Error {
 
     #[error("Database is closed")]
     DatabaseClosed,
+
+    #[error("Other error: {0}")]
+    Other(String),
 }
