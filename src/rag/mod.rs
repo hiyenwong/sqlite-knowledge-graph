@@ -1,6 +1,4 @@
-pub mod rag;
-pub mod error;
-
+mod error;
 pub use error::RagError;
 
 use crate::graph::Entity;
@@ -43,7 +41,7 @@ impl RagEngine {
         Self { config }
     }
     
-    pub fn search(&self, vector_results: Vec<SearchResult>, k: usize) -> Vec<RagResult> {
+    pub fn search(&self, _vector_results: Vec<SearchResult>, _k: usize) -> Vec<RagResult> {
         // TODO: Implement hybrid search
         // 1. Get vector search results
         // 2. Expand with graph neighbors

@@ -1,6 +1,4 @@
-pub mod vector;
-pub mod error;
-
+mod error;
 pub use error::VectorError;
 
 /// Vector storage configuration

@@ -40,7 +40,7 @@ fn register_kg_functions(conn: &Connection) -> Result<()> {
         |ctx: &Context| {
             let entity_type: String = ctx.get(0)?;
             let name: String = ctx.get(1)?;
-            let properties: String = ctx.get(2)?;
+            let _properties: String = ctx.get(2)?;
             // TODO: Implement entity insertion
             Ok(format!("Entity inserted: {} - {}", entity_type, name))
         },
