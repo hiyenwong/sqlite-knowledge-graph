@@ -1,17 +1,35 @@
-pub use crate::graph::GraphError;
-pub use crate::vector::VectorError;
-pub use crate::rag::RagError;
+//! Error types for sqlite-knowledge-graph.
 
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("Graph error: {0}")]
-    Graph(#[from] GraphError),
-    
-    #[error("Vector error: {0}")]
-    Vector(#[from] VectorError),
-    
-    #[error("RAG error: {0}")]
-    Rag(#[from] RagError),
-}
+use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("SQLite error: {0}")]
+    SQLite(#[from] rusqlite::Error),
+
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
+
+    #[error("Entity not found: {0}")]
+    EntityNotFound(i64),
+
+    #[error("Relation not found: {0}")]
+    RelationNotFound(i64),
+
+    #[error("Invalid vector dimension: expected {expected}, got {actual}")]
+    InvalidVectorDimension { expected: usize, actual: usize },
+
+    #[error("Invalid depth: {0}")]
+    InvalidDepth(u32),
+
+    #[error("Invalid weight: {0}")]
+    InvalidWeight(f64),
+
+    #[error("Invalid entity type: {0}")]
+    InvalidEntityType(String),
+
+    #[error("Database is closed")]
+    DatabaseClosed,
+}

@@ -2,29 +2,14 @@
 name = "sqlite-knowledge-graph"
 version = "0.1.0"
 edition = "2021"
-authors = ["Aerial <aerial@openclaw.ai>"]
-license = "MIT"
-description = "SQLite knowledge graph plugin with vector search and RAG capabilities"
-repository = "https://github.com/hiyenwong/sqlite-knowledge-graph"
-keywords = ["sqlite", "knowledge-graph", "vector-search", "rag", "rust"]
-categories = ["database", "science"]
-
-[lib]
-name = "sqlite_knowledge_graph"
-crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-rusqlite = { version = "0.31", features = ["load_extension", "functions"] }
+rusqlite = { version = "0.32", features = ["functions", "blob", "bundled"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-ndarray = "0.15"
 thiserror = "1.0"
-log = "0.4"
-env_logger = "0.11"
+tracing = "0.1"
 
 [dev-dependencies]
 tempfile = "3.10"
-
-[profile.release]
-opt-level = 3
-lto = true
+shellexpand = "3.1"
