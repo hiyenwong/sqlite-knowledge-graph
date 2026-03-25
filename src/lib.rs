@@ -17,6 +17,7 @@ pub mod vector;
 pub use error::{Error, Result};
 pub use functions::register_functions;
 pub use graph::{Entity, Neighbor, Relation};
+pub use graph::{TraversalNode, TraversalPath, PathStep, GraphStats, Direction, TraversalQuery};
 pub use migrate::{migrate_papers, migrate_skills, build_relationships, migrate_all, MigrationStats};
 pub use schema::{create_schema, schema_exists};
 pub use vector::{SearchResult, VectorStore, cosine_similarity};
@@ -202,6 +203,56 @@ impl KnowledgeGraph {
         }
 
         Ok(hybrid_results)
+    }
+
+    // ========== Graph Traversal Functions ==========
+
+    /// BFS traversal from a starting entity.
+    /// Returns all reachable entities within max_depth with depth information.
+    pub fn kg_bfs_traversal(
+        &self,
+        start_id: i64,
+        direction: Direction,
+        max_depth: u32,
+    ) -> Result<Vec<TraversalNode>> {
+        let query = TraversalQuery {
+            direction,
+            max_depth,
+            ..Default::default()
+        };
+        graph::bfs_traversal(&self.conn, start_id, query)
+    }
+
+    /// DFS traversal from a starting entity.
+    /// Returns all reachable entities within max_depth.
+    pub fn kg_dfs_traversal(
+        &self,
+        start_id: i64,
+        direction: Direction,
+        max_depth: u32,
+    ) -> Result<Vec<TraversalNode>> {
+        let query = TraversalQuery {
+            direction,
+            max_depth,
+            ..Default::default()
+        };
+        graph::dfs_traversal(&self.conn, start_id, query)
+    }
+
+    /// Find shortest path between two entities using BFS.
+    /// Returns the path with all intermediate steps (if exists).
+    pub fn kg_shortest_path(
+        &self,
+        from_id: i64,
+        to_id: i64,
+        max_depth: u32,
+    ) -> Result<Option<TraversalPath>> {
+        graph::find_shortest_path(&self.conn, from_id, to_id, max_depth)
+    }
+
+    /// Compute graph statistics.
+    pub fn kg_graph_stats(&self) -> Result<GraphStats> {
+        graph::compute_graph_stats(&self.conn)
     }
 }
 

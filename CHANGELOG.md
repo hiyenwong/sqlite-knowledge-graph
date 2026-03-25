@@ -13,6 +13,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.0] - 2026-03-25
+
+### Added
+
+- **Graph Traversal Module** (`src/graph/traversal.rs`)
+  - `bfs_traversal()` - Breadth-first search with depth tracking
+  - `dfs_traversal()` - Depth-first search with depth tracking
+  - `find_shortest_path()` - BFS-based shortest path between entities
+  - `compute_graph_stats()` - Graph statistics (entities, relations, density)
+
+- **New Types**
+  - `TraversalNode` - Node with depth information
+  - `TraversalPath` - Complete path with steps
+  - `PathStep` - Edge information in path
+  - `GraphStats` - Graph statistics
+  - `Direction` - Traversal direction (Outgoing/Incoming/Both)
+  - `TraversalQuery` - Query parameters for traversal
+
+- **KnowledgeGraph API**
+  - `kg_bfs_traversal()` - BFS from entity
+  - `kg_dfs_traversal()` - DFS from entity
+  - `kg_shortest_path()` - Shortest path between entities
+  - `kg_graph_stats()` - Get graph statistics
+
+### Technical
+
+- 32 tests passing (27 unit + 5 integration)
+- New traversal module with comprehensive test coverage
+
+---
+
 ## [0.3.0] - 2026-03-25
 
 ### Added
