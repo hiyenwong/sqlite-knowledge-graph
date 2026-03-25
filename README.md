@@ -42,7 +42,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-sqlite-knowledge-graph = { git = "https://github.com/yourusername/sqlite-knowledge-graph" }
+sqlite-knowledge-graph = { git = "https://github.com/hiyenwong/sqlite-knowledge-graph" }
 ```
 
 Or for local development:
