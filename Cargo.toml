@@ -6,9 +6,12 @@ authors = ["Hi Yen Wong"]
 description = "A Rust library for building and querying knowledge graphs using SQLite as the backend, with graph algorithms, vector search, and RAG support"
 license = "MIT"
 repository = "https://github.com/hiyenwong/sqlite-knowledge-graph"
+homepage = "https://github.com/hiyenwong/sqlite-knowledge-graph"
+documentation = "https://docs.rs/sqlite-knowledge-graph"
 readme = "README.md"
 keywords = ["sqlite", "knowledge-graph", "graph-algorithms", "vector-search", "rag"]
 categories = ["database", "data-structures", "science"]
+rust-version = "1.70"
 exclude = ["/.github", "/benches", "/tests", "/docs"]
 
 [lib]
