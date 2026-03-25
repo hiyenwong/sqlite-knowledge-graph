@@ -25,6 +25,11 @@ ndarray = "0.15"
 [dev-dependencies]
 tempfile = "3.10"
 shellexpand = "3.1"
+criterion = "0.5"
+
+[[bench]]
+name = "turboquant_bench"
+harness = false
 
 [features]
 default = []

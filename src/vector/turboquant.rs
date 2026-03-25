@@ -9,7 +9,6 @@
 //! - No training required (data-oblivious)
 
 use crate::error::{Error, Result};
-use ndarray::{Array1, Array2};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -81,9 +80,9 @@ impl TurboQuantIndex {
         // Simplified: use random normal matrix
         let mut matrix = vec![vec![0.0f32; d]; d];
 
-        for i in 0..d {
-            for j in 0..d {
-                matrix[i][j] = rng.gen::<f32>() * 2.0 - 1.0;
+        for row in &mut matrix {
+            for val in row.iter_mut() {
+                *val = rng.gen::<f32>() * 2.0 - 1.0;
             }
         }
 
@@ -165,9 +164,9 @@ impl TurboQuantIndex {
         let d = self.config.dimension;
         let mut rotated = vec![0.0f32; d];
 
-        for i in 0..d {
-            for j in 0..d {
-                rotated[i] += self.rotation_matrix[i][j] * vector[j];
+        for (i, rot_row) in self.rotation_matrix.iter().enumerate().take(d) {
+            for (j, &val) in vector.iter().enumerate().take(d) {
+                rotated[i] += rot_row[j] * val;
             }
         }
 

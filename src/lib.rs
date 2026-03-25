@@ -202,11 +202,7 @@ impl KnowledgeGraph {
         &self,
         config: Option<TurboQuantConfig>,
     ) -> Result<TurboQuantIndex> {
-        let config = config.unwrap_or_else(|| TurboQuantConfig {
-            dimension: 384,
-            bit_width: 3,
-            seed: 42,
-        });
+        let config = config.unwrap_or_default();
 
         TurboQuantIndex::new(config)
     }
@@ -220,7 +216,7 @@ impl KnowledgeGraph {
         // Get dimension from first vector
         let dimension = self.get_vector_dimension()?.unwrap_or(384);
 
-        let config = config.unwrap_or_else(|| TurboQuantConfig {
+        let config = config.unwrap_or(TurboQuantConfig {
             dimension,
             bit_width: 3,
             seed: 42,
