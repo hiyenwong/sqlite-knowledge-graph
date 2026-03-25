@@ -3,10 +3,7 @@
 //! This module provides the SQLite loadable extension interface.
 
 use sqlite_loadable::{
-    define_scalar_function,
-    ext::sqlite3ext_result_text,
-    prelude::*,
-    Error, FunctionFlags,
+    define_scalar_function, ext::sqlite3ext_result_text, prelude::*, Error, FunctionFlags,
 };
 use std::ffi::CString;
 use std::os::raw::c_void;
@@ -17,7 +14,10 @@ extern "C" {
 }
 
 /// kg_version() - Returns the extension version
-pub fn kg_version(context: *mut sqlite3_context, _values: &[*mut sqlite3_value]) -> Result<(), Error> {
+pub fn kg_version(
+    context: *mut sqlite3_context,
+    _values: &[*mut sqlite3_value],
+) -> Result<(), Error> {
     let version = CString::new(env!("CARGO_PKG_VERSION")).unwrap();
     unsafe {
         // SQLITE_TRANSIENT = -1, cast to destructor function pointer
@@ -32,7 +32,10 @@ pub fn kg_version(context: *mut sqlite3_context, _values: &[*mut sqlite3_value])
 }
 
 /// kg_stats() - Returns placeholder stats
-pub fn kg_stats(context: *mut sqlite3_context, _values: &[*mut sqlite3_value]) -> Result<(), Error> {
+pub fn kg_stats(
+    context: *mut sqlite3_context,
+    _values: &[*mut sqlite3_value],
+) -> Result<(), Error> {
     let stats = CString::new("{\"message\": \"Extension loaded\"}").unwrap();
     unsafe {
         sqlite3ext_result_text(
@@ -48,10 +51,10 @@ pub fn kg_stats(context: *mut sqlite3_context, _values: &[*mut sqlite3_value]) -
 /// Register functions
 fn register_functions(db: *mut sqlite3) -> Result<(), Error> {
     let flags = FunctionFlags::UTF8 | FunctionFlags::DETERMINISTIC;
-    
+
     define_scalar_function(db, "kg_version", 0, kg_version, flags)?;
     define_scalar_function(db, "kg_stats", 0, kg_stats, flags)?;
-    
+
     Ok(())
 }
 
