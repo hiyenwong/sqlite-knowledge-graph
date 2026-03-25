@@ -1,8 +1,8 @@
 //! Entity storage module for the knowledge graph.
 
+use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use rusqlite::params;
 
 use crate::error::{Error, Result};
 
@@ -106,7 +106,9 @@ pub fn list_entities(
     entity_type: Option<&str>,
     limit: Option<i64>,
 ) -> Result<Vec<Entity>> {
-    let mut query = "SELECT id, entity_type, name, properties, created_at, updated_at FROM kg_entities".to_string();
+    let mut query =
+        "SELECT id, entity_type, name, properties, created_at, updated_at FROM kg_entities"
+            .to_string();
 
     let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 

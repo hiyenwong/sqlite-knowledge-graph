@@ -8,25 +8,30 @@
 //! - RAG (Retrieval-Augmented Generation) query functions
 //! - Graph algorithms (PageRank, Louvain, Connected Components)
 
+pub mod algorithms;
 pub mod error;
 pub mod functions;
 pub mod graph;
 pub mod migrate;
 pub mod schema;
 pub mod vector;
-pub mod algorithms;
 
+pub use algorithms::{
+    analyze_graph, connected_components, louvain_communities, pagerank, CommunityResult,
+    PageRankConfig,
+};
 pub use error::{Error, Result};
 pub use functions::register_functions;
+pub use graph::{Direction, GraphStats, PathStep, TraversalNode, TraversalPath, TraversalQuery};
 pub use graph::{Entity, Neighbor, Relation};
-pub use graph::{TraversalNode, TraversalPath, PathStep, GraphStats, Direction, TraversalQuery};
-pub use migrate::{migrate_papers, migrate_skills, build_relationships, migrate_all, MigrationStats};
+pub use migrate::{
+    build_relationships, migrate_all, migrate_papers, migrate_skills, MigrationStats,
+};
 pub use schema::{create_schema, schema_exists};
-pub use vector::{SearchResult, VectorStore, cosine_similarity};
-pub use algorithms::{pagerank, louvain_communities, connected_components, PageRankConfig, CommunityResult, analyze_graph};
+pub use vector::{cosine_similarity, SearchResult, VectorStore};
 
 use rusqlite::Connection;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// Semantic search result with entity information.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -156,7 +161,11 @@ impl KnowledgeGraph {
 
     /// Semantic search using vector embeddings.
     /// Returns entities sorted by similarity score.
-    pub fn kg_semantic_search(&self, query_embedding: Vec<f32>, k: usize) -> Result<Vec<SearchResultWithEntity>> {
+    pub fn kg_semantic_search(
+        &self,
+        query_embedding: Vec<f32>,
+        k: usize,
+    ) -> Result<Vec<SearchResultWithEntity>> {
         let results = self.search_vectors(query_embedding, k)?;
 
         let mut entities_with_results = Vec::new();

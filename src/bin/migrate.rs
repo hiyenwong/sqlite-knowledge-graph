@@ -1,6 +1,6 @@
 //! CLI tool for data migration and RAG queries on the knowledge graph.
 
-use sqlite_knowledge_graph::{KnowledgeGraph, Error};
+use sqlite_knowledge_graph::{Error, KnowledgeGraph};
 
 fn main() -> Result<(), Error> {
     let args: Vec<String> = std::env::args().collect();
@@ -166,7 +166,12 @@ fn run_search(args: &[String]) -> Result<(), Error> {
         println!("Found {} results (hybrid search):", results.len());
         for (idx, result) in results.iter().enumerate() {
             println!();
-            println!("{}. {} (similarity: {:.3})", idx + 1, result.entity.name, result.similarity);
+            println!(
+                "{}. {} (similarity: {:.3})",
+                idx + 1,
+                result.entity.name,
+                result.similarity
+            );
             if let Some(context) = &result.context {
                 println!("   Context: {} neighbors", context.neighbors.len());
             }
@@ -177,7 +182,12 @@ fn run_search(args: &[String]) -> Result<(), Error> {
         println!("Found {} results (semantic search):", results.len());
         for (idx, result) in results.iter().enumerate() {
             println!();
-            println!("{}. {} (similarity: {:.3})", idx + 1, result.entity.name, result.similarity);
+            println!(
+                "{}. {} (similarity: {:.3})",
+                idx + 1,
+                result.entity.name,
+                result.similarity
+            );
 
             // Show some properties
             if let Some(arxiv_id) = result.entity.get_property("arxiv_id") {
@@ -238,11 +248,14 @@ fn run_stats(args: &[String]) -> Result<(), Error> {
     println!();
 
     // Show high utility papers
-    let mut high_utility: Vec<_> = papers.iter().filter_map(|p| {
-        p.get_property("utility")
-            .and_then(|v| v.as_f64())
-            .map(|u| (p, u))
-    }).collect();
+    let mut high_utility: Vec<_> = papers
+        .iter()
+        .filter_map(|p| {
+            p.get_property("utility")
+                .and_then(|v| v.as_f64())
+                .map(|u| (p, u))
+        })
+        .collect();
 
     high_utility.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
@@ -305,7 +318,8 @@ fn run_context(args: &[String]) -> Result<(), Error> {
 
     println!("Neighbors ({}):", context.neighbors.len());
     for (idx, neighbor) in context.neighbors.iter().enumerate() {
-        println!("  {}. {} -> {} via {} (weight: {:.2})",
+        println!(
+            "  {}. {} -> {} via {} (weight: {:.2})",
             idx + 1,
             neighbor.relation.source_id,
             neighbor.entity.name,
@@ -326,8 +340,10 @@ fn generate_dummy_embedding() -> Vec<f32> {
         .as_nanos() as u32;
 
     let mut rng = seed;
-    (0..384).map(|_| {
-        rng = rng.wrapping_mul(1664525).wrapping_add(1013904223);
-        (rng as f32) / (u32::MAX as f32)
-    }).collect()
+    (0..384)
+        .map(|_| {
+            rng = rng.wrapping_mul(1664525).wrapping_add(1013904223);
+            (rng as f32) / (u32::MAX as f32)
+        })
+        .collect()
 }

@@ -1,17 +1,16 @@
+use crate::error::Result;
 /// Graph algorithms for sqlite-knowledge-graph
 ///
 /// Provides PageRank, Louvain community detection, and connected components.
-
 use rusqlite::Connection;
-use crate::error::Result;
 
-mod pagerank;
-mod louvain;
 mod connected;
+mod louvain;
+mod pagerank;
 
-pub use pagerank::{pagerank, PageRankConfig};
-pub use louvain::{louvain_communities, CommunityResult};
 pub use connected::{connected_components, strongly_connected_components};
+pub use louvain::{louvain_communities, CommunityResult};
+pub use pagerank::{pagerank, PageRankConfig};
 
 /// Run all graph algorithms and return summary
 pub fn analyze_graph(conn: &Connection) -> Result<GraphAnalysis> {

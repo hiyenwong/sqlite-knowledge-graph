@@ -1,10 +1,9 @@
+use crate::error::Result;
 /// Graph traversal algorithms for sqlite-knowledge-graph
 ///
 /// Provides BFS/DFS traversal, shortest path, and graph statistics.
-
 use rusqlite::Connection;
-use crate::error::Result;
-use std::collections::{HashMap, VecDeque, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Node with depth information for traversal results
 #[derive(Debug, Clone)]
@@ -139,7 +138,15 @@ pub fn dfs_traversal(
         |row| row.get(0),
     )?;
 
-    dfs_visit(conn, start_id, start_type, 0, &query, &mut visited, &mut result)?;
+    dfs_visit(
+        conn,
+        start_id,
+        start_type,
+        0,
+        &query,
+        &mut visited,
+        &mut result,
+    )?;
 
     Ok(result)
 }
@@ -171,7 +178,15 @@ fn dfs_visit(
     let neighbors = get_neighbors(conn, entity_id, query)?;
 
     for (neighbor_id, neighbor_type) in neighbors {
-        dfs_visit(conn, neighbor_id, neighbor_type, depth + 1, query, visited, result)?;
+        dfs_visit(
+            conn,
+            neighbor_id,
+            neighbor_type,
+            depth + 1,
+            query,
+            visited,
+            result,
+        )?;
     }
 
     Ok(())
@@ -212,8 +227,8 @@ pub fn find_shortest_path(
         let relations = get_outgoing_relations(conn, current_id)?;
 
         for (target_id, rel_type, weight) in relations {
-            if !visited.contains_key(&target_id) {
-                visited.insert(target_id, Some((current_id, rel_type.clone(), weight)));
+            if let std::collections::hash_map::Entry::Vacant(e) = visited.entry(target_id) {
+                e.insert(Some((current_id, rel_type.clone(), weight)));
 
                 if target_id == to_id {
                     // Reconstruct path
@@ -230,17 +245,11 @@ pub fn find_shortest_path(
 
 /// Compute graph statistics
 pub fn compute_graph_stats(conn: &Connection) -> Result<GraphStats> {
-    let total_entities: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM entities",
-        [],
-        |row| row.get(0),
-    )?;
+    let total_entities: i64 =
+        conn.query_row("SELECT COUNT(*) FROM entities", [], |row| row.get(0))?;
 
-    let total_relations: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM relations",
-        [],
-        |row| row.get(0),
-    )?;
+    let total_relations: i64 =
+        conn.query_row("SELECT COUNT(*) FROM relations", [], |row| row.get(0))?;
 
     let max_degree: i64 = conn.query_row(
         "SELECT COALESCE(MAX(cnt), 0) FROM (
@@ -319,15 +328,11 @@ fn get_neighbors(
     Ok(neighbors)
 }
 
-fn get_outgoing_relations(
-    conn: &Connection,
-    entity_id: i64,
-) -> Result<Vec<(i64, String, f64)>> {
+fn get_outgoing_relations(conn: &Connection, entity_id: i64) -> Result<Vec<(i64, String, f64)>> {
     let mut relations = Vec::new();
 
-    let mut stmt = conn.prepare(
-        "SELECT to_id, relation_type, weight FROM relations WHERE from_id = ?1"
-    )?;
+    let mut stmt =
+        conn.prepare("SELECT to_id, relation_type, weight FROM relations WHERE from_id = ?1")?;
 
     let rows = stmt.query_map([entity_id], |row| {
         Ok((
@@ -416,14 +421,31 @@ mod tests {
                 weight REAL DEFAULT 1.0,
                 confidence REAL DEFAULT 1.0
             );
-            "
-        ).unwrap();
+            ",
+        )
+        .unwrap();
 
         // Insert test entities
-        conn.execute("INSERT INTO entities (id, entity_type, name) VALUES (1, 'paper', 'A')", []).unwrap();
-        conn.execute("INSERT INTO entities (id, entity_type, name) VALUES (2, 'paper', 'B')", []).unwrap();
-        conn.execute("INSERT INTO entities (id, entity_type, name) VALUES (3, 'paper', 'C')", []).unwrap();
-        conn.execute("INSERT INTO entities (id, entity_type, name) VALUES (4, 'paper', 'D')", []).unwrap();
+        conn.execute(
+            "INSERT INTO entities (id, entity_type, name) VALUES (1, 'paper', 'A')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO entities (id, entity_type, name) VALUES (2, 'paper', 'B')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO entities (id, entity_type, name) VALUES (3, 'paper', 'C')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO entities (id, entity_type, name) VALUES (4, 'paper', 'D')",
+            [],
+        )
+        .unwrap();
 
         // Insert test relations: A -> B -> C, A -> D
         conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (1, 2, 'cites', 1.0)", []).unwrap();

@@ -1,7 +1,6 @@
-/// Louvain community detection algorithm
-
-use rusqlite::Connection;
 use crate::error::Result;
+/// Louvain community detection algorithm
+use rusqlite::Connection;
 use std::collections::HashMap;
 
 /// Community detection result
@@ -23,12 +22,14 @@ pub fn louvain_communities(conn: &Connection) -> Result<CommunityResult> {
     let mut graph: HashMap<i64, HashMap<i64, f64>> = HashMap::new();
     let mut total_weight = 0.0;
 
-    let mut stmt = conn.prepare(
-        "SELECT from_id, to_id, weight FROM relations"
-    )?;
+    let mut stmt = conn.prepare("SELECT from_id, to_id, weight FROM relations")?;
 
     let rows = stmt.query_map([], |row| {
-        Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?, row.get::<_, f64>(2)?))
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, i64>(1)?,
+            row.get::<_, f64>(2)?,
+        ))
     })?;
 
     for row in rows {
@@ -50,7 +51,11 @@ pub fn louvain_communities(conn: &Connection) -> Result<CommunityResult> {
     let _n = nodes.len();
 
     // Initialize: each node in its own community
-    let mut community: HashMap<i64, i32> = nodes.iter().enumerate().map(|(i, &id)| (id, i as i32)).collect();
+    let mut community: HashMap<i64, i32> = nodes
+        .iter()
+        .enumerate()
+        .map(|(i, &id)| (id, i as i32))
+        .collect();
     let mut improved = true;
     let mut iteration = 0;
 
@@ -60,10 +65,13 @@ pub fn louvain_communities(conn: &Connection) -> Result<CommunityResult> {
 
         for &node in &nodes {
             let current_community = community[&node];
-            
+
             // Find neighboring communities
-            let neighbors: Vec<i64> = graph.get(&node).map(|edges| edges.keys().copied().collect()).unwrap_or_default();
-            
+            let neighbors: Vec<i64> = graph
+                .get(&node)
+                .map(|edges| edges.keys().copied().collect())
+                .unwrap_or_default();
+
             let mut best_community = current_community;
             let mut best_gain = 0.0;
 
@@ -74,8 +82,14 @@ pub fn louvain_communities(conn: &Connection) -> Result<CommunityResult> {
                 }
 
                 // Calculate modularity gain (simplified)
-                let gain = calculate_modularity_gain(&graph, node, neighbor_community, &community, total_weight);
-                
+                let gain = calculate_modularity_gain(
+                    &graph,
+                    node,
+                    neighbor_community,
+                    &community,
+                    total_weight,
+                );
+
                 if gain > best_gain {
                     best_gain = gain;
                     best_community = neighbor_community;
@@ -92,15 +106,16 @@ pub fn louvain_communities(conn: &Connection) -> Result<CommunityResult> {
     // Renumber communities consecutively
     let mut community_map: HashMap<i32, i32> = HashMap::new();
     let mut next_id = 0i32;
-    
+
     for &comm in community.values() {
-        if !community_map.contains_key(&comm) {
-            community_map.insert(comm, next_id);
+        if let std::collections::hash_map::Entry::Vacant(e) = community_map.entry(comm) {
+            e.insert(next_id);
             next_id += 1;
         }
     }
 
-    let memberships: Vec<(i64, i32)> = nodes.iter()
+    let memberships: Vec<(i64, i32)> = nodes
+        .iter()
         .map(|&id| (id, community_map[&community[&id]]))
         .collect();
 
@@ -168,7 +183,11 @@ mod tests {
         ).unwrap();
 
         // Create two communities: 1-2-3 and 4-5-6, with weak link between
-        conn.execute("INSERT INTO entities (id) VALUES (1), (2), (3), (4), (5), (6)", []).unwrap();
+        conn.execute(
+            "INSERT INTO entities (id) VALUES (1), (2), (3), (4), (5), (6)",
+            [],
+        )
+        .unwrap();
         conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (1, 2, 'link', 1.0)", []).unwrap();
         conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (2, 3, 'link', 1.0)", []).unwrap();
         conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (4, 5, 'link', 1.0)", []).unwrap();

@@ -1,7 +1,7 @@
 //! Integration tests using the Aerial knowledge backup data.
 
 use rusqlite::Connection;
-use sqlite_knowledge_graph::{KnowledgeGraph, Entity, Relation, cosine_similarity};
+use sqlite_knowledge_graph::{cosine_similarity, Entity, KnowledgeGraph, Relation};
 
 #[test]
 fn test_integration_with_aerial_backup() {
@@ -10,7 +10,10 @@ fn test_integration_with_aerial_backup() {
     let backup_path_expanded = shellexpand::tilde(backup_path).to_string();
 
     if !std::path::Path::new(&backup_path_expanded).exists() {
-        println!("Warning: Backup database not found at {}", backup_path_expanded);
+        println!(
+            "Warning: Backup database not found at {}",
+            backup_path_expanded
+        );
         println!("Skipping integration test.");
         return;
     }
@@ -168,13 +171,11 @@ fn test_batch_operations() {
     let entity_ids: Vec<i64> = entities.iter().filter_map(|e| e.id).collect();
 
     for entity_id in &entity_ids {
-        let vector = vec
-![1.0; 10];
+        let vector = vec![1.0; 10];
         kg.insert_vector(*entity_id, vector).unwrap();
     }
 
-    let query = vec
-![1.0; 10];
+    let query = vec![1.0; 10];
     let results = kg.search_vectors(query, 10).unwrap();
     assert_eq!(results.len(), 10);
 }
@@ -190,21 +191,17 @@ fn test_graph_traversal_complex() {
     //     3 -> 5
 
     let entity_ids: Vec<i64> = (0..5)
-        .map(|i| kg.insert_entity(&Entity::new("node", format!("Node {}", i))).unwrap())
+        .map(|i| {
+            kg.insert_entity(&Entity::new("node", format!("Node {}", i)))
+                .unwrap()
+        })
         .collect();
 
     // Add relations
-    let edges = [
-        (0, 1),
-        (0, 2),
-        (1, 3),
-        (1, 4),
-        (2, 4),
-    ];
+    let edges = [(0, 1), (0, 2), (1, 3), (1, 4), (2, 4)];
 
     for (from, to) in edges {
-        let relation =
-            Relation::new(entity_ids[from], entity_ids[to], "connects", 1.0).unwrap();
+        let relation = Relation::new(entity_ids[from], entity_ids[to], "connects", 1.0).unwrap();
         kg.insert_relation(&relation).unwrap();
     }
 
@@ -262,14 +259,23 @@ fn test_entity_properties_complex() {
         Some(expected_authors.as_array().unwrap())
     );
 
-    assert_eq!(retrieved.get_property("year").and_then(|v| v.as_i64()), Some(2024));
+    assert_eq!(
+        retrieved.get_property("year").and_then(|v| v.as_i64()),
+        Some(2024)
+    );
 
     assert_eq!(
-        retrieved.get_property("metadata").and_then(|v| v.as_object()),
-        Some(serde_json::json!({
-            "review_status": "accepted",
-            "conference": "NeurIPS",
-            "pages": [1, 2, 3, 4, 5]
-        }).as_object().unwrap())
+        retrieved
+            .get_property("metadata")
+            .and_then(|v| v.as_object()),
+        Some(
+            serde_json::json!({
+                "review_status": "accepted",
+                "conference": "NeurIPS",
+                "pages": [1, 2, 3, 4, 5]
+            })
+            .as_object()
+            .unwrap()
+        )
     );
 }

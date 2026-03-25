@@ -65,7 +65,7 @@ pub fn register_functions(conn: &rusqlite::Connection) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rusqlite::{Connection, params};
+    use rusqlite::{params, Connection};
 
     #[test]
     fn test_register_functions() {

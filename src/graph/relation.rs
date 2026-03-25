@@ -1,8 +1,8 @@
 //! Relation storage module for the knowledge graph.
 
+use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-use rusqlite::params;
 
 use crate::error::{Error, Result};
 use crate::graph::entity::Entity;
@@ -291,7 +291,7 @@ pub fn get_relations_by_source(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::entity::{Entity, insert_entity};
+    use crate::graph::entity::{insert_entity, Entity};
     use rusqlite::Connection;
 
     #[test]

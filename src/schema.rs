@@ -87,7 +87,8 @@ pub fn create_schema(conn: &Connection) -> Result<()> {
 
 /// Check if the schema exists.
 pub fn schema_exists(conn: &Connection) -> Result<bool> {
-    let mut stmt = conn.prepare("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='kg_entities'")?;
+    let mut stmt = conn
+        .prepare("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='kg_entities'")?;
     let count: i64 = stmt.query_row([], |row| row.get(0))?;
     Ok(count > 0)
 }

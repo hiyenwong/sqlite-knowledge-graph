@@ -6,6 +6,12 @@ use rusqlite::params;
 /// Represents a vector storage for embeddings.
 pub struct VectorStore;
 
+impl Default for VectorStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VectorStore {
     /// Create a new vector store.
     pub fn new() -> Self {
@@ -131,7 +137,8 @@ impl VectorStore {
 
     /// Get vector for an entity.
     pub fn get_vector(&self, conn: &rusqlite::Connection, entity_id: i64) -> Result<Vec<f32>> {
-        let mut stmt = conn.prepare("SELECT vector, dimension FROM kg_vectors WHERE entity_id = ?1")?;
+        let mut stmt =
+            conn.prepare("SELECT vector, dimension FROM kg_vectors WHERE entity_id = ?1")?;
 
         let vector_blob: Vec<u8> = stmt.query_row(params![entity_id], |row| row.get(0))?;
 
@@ -197,7 +204,7 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::entity::{Entity, insert_entity};
+    use crate::graph::entity::{insert_entity, Entity};
     use rusqlite::Connection;
 
     #[test]

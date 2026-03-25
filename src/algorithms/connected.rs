@@ -1,7 +1,8 @@
+use crate::error::Result;
 /// Connected components algorithms
+use std::cmp::Reverse;
 
 use rusqlite::Connection;
-use crate::error::Result;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Find weakly connected components
@@ -12,13 +13,9 @@ pub fn connected_components(conn: &Connection) -> Result<Vec<Vec<i64>>> {
     let mut graph: HashMap<i64, Vec<i64>> = HashMap::new();
     let mut all_nodes: HashSet<i64> = HashSet::new();
 
-    let mut stmt = conn.prepare(
-        "SELECT from_id, to_id FROM relations"
-    )?;
+    let mut stmt = conn.prepare("SELECT from_id, to_id FROM relations")?;
 
-    let rows = stmt.query_map([], |row| {
-        Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
-    })?;
+    let rows = stmt.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)))?;
 
     for row in rows {
         let (from, to) = row?;
@@ -67,7 +64,7 @@ pub fn connected_components(conn: &Connection) -> Result<Vec<Vec<i64>>> {
     }
 
     // Sort by size descending
-    components.sort_by(|a, b| b.len().cmp(&a.len()));
+    components.sort_by_key(|b| Reverse(b.len()));
 
     Ok(components)
 }
@@ -82,9 +79,7 @@ pub fn strongly_connected_components(conn: &Connection) -> Result<Vec<Vec<i64>>>
     let mut all_nodes: HashSet<i64> = HashSet::new();
 
     let mut stmt = conn.prepare("SELECT from_id, to_id FROM relations")?;
-    let rows = stmt.query_map([], |row| {
-        Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
-    })?;
+    let rows = stmt.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)))?;
 
     for row in rows {
         let (from, to) = row?;
@@ -153,7 +148,7 @@ pub fn strongly_connected_components(conn: &Connection) -> Result<Vec<Vec<i64>>>
     }
 
     // Sort by size descending
-    components.sort_by(|a, b| b.len().cmp(&a.len()));
+    components.sort_by_key(|b| Reverse(b.len()));
 
     Ok(components)
 }
@@ -170,7 +165,11 @@ mod tests {
         ).unwrap();
 
         // Create two disconnected components: 1-2-3 and 4-5
-        conn.execute("INSERT INTO entities (id) VALUES (1), (2), (3), (4), (5)", []).unwrap();
+        conn.execute(
+            "INSERT INTO entities (id) VALUES (1), (2), (3), (4), (5)",
+            [],
+        )
+        .unwrap();
         conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (1, 2, 'link', 1.0)", []).unwrap();
         conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (2, 3, 'link', 1.0)", []).unwrap();
         conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (4, 5, 'link', 1.0)", []).unwrap();
@@ -197,7 +196,8 @@ mod tests {
         ).unwrap();
 
         // Create a cycle: 1 -> 2 -> 3 -> 1
-        conn.execute("INSERT INTO entities (id) VALUES (1), (2), (3)", []).unwrap();
+        conn.execute("INSERT INTO entities (id) VALUES (1), (2), (3)", [])
+            .unwrap();
         conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (1, 2, 'link', 1.0)", []).unwrap();
         conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (2, 3, 'link', 1.0)", []).unwrap();
         conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (3, 1, 'link', 1.0)", []).unwrap();

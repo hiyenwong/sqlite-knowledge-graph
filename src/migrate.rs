@@ -1,10 +1,10 @@
 //! Data migration module for importing external knowledge sources.
 
 use rusqlite::Connection;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use serde_json::Value;
 
 use crate::error::{Error, Result};
 use crate::graph::Entity;
@@ -33,21 +33,30 @@ pub fn migrate_papers(source_db: &str, kg: &KnowledgeGraph) -> Result<i64> {
 
     let rows = stmt.query_map([], |row| {
         Ok((
-            row.get::<_, String>(0)?,  // arxiv_id
-            row.get::<_, String>(1)?,  // title
-            row.get::<_, Option<String>>(2)?,  // file_path
-            row.get::<_, Option<String>>(3)?,  // keywords
-            row.get::<_, Option<f64>>(4)?,  // utility
-            row.get::<_, Option<String>>(5)?,  // skill_created
-            row.get::<_, Option<String>>(6)?,  // last_accessed
-            row.get::<_, Option<String>>(7)?,  // created_at
-            row.get::<_, Option<String>>(8)?,  // notes
+            row.get::<_, String>(0)?,         // arxiv_id
+            row.get::<_, String>(1)?,         // title
+            row.get::<_, Option<String>>(2)?, // file_path
+            row.get::<_, Option<String>>(3)?, // keywords
+            row.get::<_, Option<f64>>(4)?,    // utility
+            row.get::<_, Option<String>>(5)?, // skill_created
+            row.get::<_, Option<String>>(6)?, // last_accessed
+            row.get::<_, Option<String>>(7)?, // created_at
+            row.get::<_, Option<String>>(8)?, // notes
         ))
     })?;
 
     for row in rows {
-        let (arxiv_id, title, file_path, keywords, utility, skill_created, last_accessed, created_at, notes) =
-            row?;
+        let (
+            arxiv_id,
+            title,
+            file_path,
+            keywords,
+            utility,
+            skill_created,
+            last_accessed,
+            created_at,
+            notes,
+        ) = row?;
 
         let mut properties = HashMap::new();
         properties.insert("arxiv_id".to_string(), Value::String(arxiv_id.clone()));
@@ -61,9 +70,12 @@ pub fn migrate_papers(source_db: &str, kg: &KnowledgeGraph) -> Result<i64> {
         }
 
         if let Some(util) = utility {
-            properties.insert("utility".to_string(), Value::Number(
-                serde_json::Number::from_f64(util).unwrap_or(serde_json::Number::from(0))
-            ));
+            properties.insert(
+                "utility".to_string(),
+                Value::Number(
+                    serde_json::Number::from_f64(util).unwrap_or(serde_json::Number::from(0)),
+                ),
+            );
         }
 
         if let Some(skill) = skill_created {
@@ -106,7 +118,10 @@ pub fn migrate_skills(skills_dir: &str, kg: &KnowledgeGraph) -> Result<i64> {
     let skills_path = Path::new(skills_dir);
 
     if !skills_path.exists() {
-        return Err(Error::Other(format!("Skills directory not found: {}", skills_dir)));
+        return Err(Error::Other(format!(
+            "Skills directory not found: {}",
+            skills_dir
+        )));
     }
 
     let tx = kg.transaction()?;
@@ -117,12 +132,16 @@ pub fn migrate_skills(skills_dir: &str, kg: &KnowledgeGraph) -> Result<i64> {
         let skill_dir = entry.path();
 
         if skill_dir.is_dir() {
-            let skill_name = skill_dir.file_name()
+            let skill_name = skill_dir
+                .file_name()
                 .and_then(|n| n.to_str())
                 .ok_or_else(|| Error::Other("Invalid skill directory name".to_string()))?;
 
             let mut properties = HashMap::new();
-            properties.insert("skill_name".to_string(), Value::String(skill_name.to_string()));
+            properties.insert(
+                "skill_name".to_string(),
+                Value::String(skill_name.to_string()),
+            );
 
             // Try to read SKILL.md
             let skill_md_path = skill_dir.join("SKILL.md");
@@ -191,7 +210,8 @@ pub fn build_relationships(kg: &KnowledgeGraph) -> Result<i64> {
             if !skill_created.is_empty() {
                 if let Some(paper_id) = paper.id {
                     if let Some(skill_id) = skill_map.get(skill_created) {
-                        let relation = crate::graph::Relation::new(paper_id, *skill_id, "derived_from", 1.0)?;
+                        let relation =
+                            crate::graph::Relation::new(paper_id, *skill_id, "derived_from", 1.0)?;
                         crate::graph::insert_relation(&tx, &relation)?;
                         count += 1;
                     }
@@ -209,7 +229,12 @@ pub fn build_relationships(kg: &KnowledgeGraph) -> Result<i64> {
             if let (Some(id_a), Some(id_b)) = (paper_a.id, paper_b.id) {
                 if let Some(similarity) = compute_keyword_similarity(paper_a, paper_b) {
                     if similarity > 0.3 {
-                        let relation = crate::graph::Relation::new(id_a, id_b, "related_by_keywords", similarity)?;
+                        let relation = crate::graph::Relation::new(
+                            id_a,
+                            id_b,
+                            "related_by_keywords",
+                            similarity,
+                        )?;
                         crate::graph::insert_relation(&tx, &relation)?;
                         count += 1;
                     }
@@ -227,7 +252,8 @@ pub fn build_relationships(kg: &KnowledgeGraph) -> Result<i64> {
             if let (Some(id_a), Some(id_b)) = (skill_a.id, skill_b.id) {
                 if let Some(similarity) = compute_skill_similarity(skill_a, skill_b) {
                     if similarity > 0.3 {
-                        let relation = crate::graph::Relation::new(id_a, id_b, "similar_to", similarity)?;
+                        let relation =
+                            crate::graph::Relation::new(id_a, id_b, "similar_to", similarity)?;
                         crate::graph::insert_relation(&tx, &relation)?;
                         count += 1;
                     }
@@ -288,18 +314,22 @@ fn compute_keyword_similarity(paper_a: &Entity, paper_b: &Entity) -> Option<f64>
 
 /// Compute similarity between two skills based on description content.
 fn compute_skill_similarity(skill_a: &Entity, skill_b: &Entity) -> Option<f64> {
-    let desc_a = skill_a.get_property("description").and_then(|v| v.as_str()).unwrap_or("");
-    let desc_b = skill_b.get_property("description").and_then(|v| v.as_str()).unwrap_or("");
+    let desc_a = skill_a
+        .get_property("description")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let desc_b = skill_b
+        .get_property("description")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
 
     if desc_a.is_empty() || desc_b.is_empty() {
         return None;
     }
 
     // Simple word overlap similarity
-    let words_a: std::collections::HashSet<&str> =
-        desc_a.split_whitespace().collect();
-    let words_b: std::collections::HashSet<&str> =
-        desc_b.split_whitespace().collect();
+    let words_a: std::collections::HashSet<&str> = desc_a.split_whitespace().collect();
+    let words_b: std::collections::HashSet<&str> = desc_b.split_whitespace().collect();
 
     let intersection = words_a.intersection(&words_b).count();
     let union = words_a.union(&words_b).count();
@@ -312,7 +342,11 @@ fn compute_skill_similarity(skill_a: &Entity, skill_b: &Entity) -> Option<f64> {
 }
 
 /// Perform full migration: papers, skills, and relationships.
-pub fn migrate_all(source_db: &str, skills_dir: &str, kg: &KnowledgeGraph) -> Result<MigrationStats> {
+pub fn migrate_all(
+    source_db: &str,
+    skills_dir: &str,
+    kg: &KnowledgeGraph,
+) -> Result<MigrationStats> {
     let papers_count = migrate_papers(source_db, kg)?;
     let skills_count = migrate_skills(skills_dir, kg)?;
     let relations_count = build_relationships(kg)?;
@@ -347,10 +381,16 @@ mod tests {
     fn test_keyword_similarity() {
         let mut paper_a = Entity::new("paper", "Paper A");
         // Store as JSON string (as it comes from the database)
-        paper_a.set_property("keywords", serde_json::Value::String(r#"["machine", "learning"]"#.to_string()));
+        paper_a.set_property(
+            "keywords",
+            serde_json::Value::String(r#"["machine", "learning"]"#.to_string()),
+        );
 
         let mut paper_b = Entity::new("paper", "Paper B");
-        paper_b.set_property("keywords", serde_json::Value::String(r#"["machine", "vision"]"#.to_string()));
+        paper_b.set_property(
+            "keywords",
+            serde_json::Value::String(r#"["machine", "vision"]"#.to_string()),
+        );
 
         let similarity = compute_keyword_similarity(&paper_a, &paper_b).unwrap();
         // keywords_a = ["machine", "learning"]
