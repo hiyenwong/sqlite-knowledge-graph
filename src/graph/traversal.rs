@@ -2,7 +2,7 @@
 ///
 /// Provides BFS/DFS traversal, shortest path, and graph statistics.
 
-use rusqlite::{Connection, Row};
+use rusqlite::Connection;
 use crate::error::Result;
 use std::collections::{HashMap, VecDeque, HashSet};
 

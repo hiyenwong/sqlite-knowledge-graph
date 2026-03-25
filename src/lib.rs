@@ -6,6 +6,7 @@
 //! - Vector embeddings for semantic search
 //! - Custom SQLite functions for direct SQL operations
 //! - RAG (Retrieval-Augmented Generation) query functions
+//! - Graph algorithms (PageRank, Louvain, Connected Components)
 
 pub mod error;
 pub mod functions;
@@ -13,6 +14,7 @@ pub mod graph;
 pub mod migrate;
 pub mod schema;
 pub mod vector;
+pub mod algorithms;
 
 pub use error::{Error, Result};
 pub use functions::register_functions;
@@ -21,6 +23,7 @@ pub use graph::{TraversalNode, TraversalPath, PathStep, GraphStats, Direction, T
 pub use migrate::{migrate_papers, migrate_skills, build_relationships, migrate_all, MigrationStats};
 pub use schema::{create_schema, schema_exists};
 pub use vector::{SearchResult, VectorStore, cosine_similarity};
+pub use algorithms::{pagerank, louvain_communities, connected_components, PageRankConfig, CommunityResult, analyze_graph};
 
 use rusqlite::Connection;
 use serde::{Serialize, Deserialize};
@@ -253,6 +256,31 @@ impl KnowledgeGraph {
     /// Compute graph statistics.
     pub fn kg_graph_stats(&self) -> Result<GraphStats> {
         graph::compute_graph_stats(&self.conn)
+    }
+
+    // ========== Graph Algorithms ==========
+
+    /// Compute PageRank scores for all entities.
+    /// Returns a vector of (entity_id, score) sorted by score descending.
+    pub fn kg_pagerank(&self, config: Option<PageRankConfig>) -> Result<Vec<(i64, f64)>> {
+        algorithms::pagerank(&self.conn, config.unwrap_or_default())
+    }
+
+    /// Detect communities using Louvain algorithm.
+    /// Returns community memberships and modularity score.
+    pub fn kg_louvain(&self) -> Result<CommunityResult> {
+        algorithms::louvain_communities(&self.conn)
+    }
+
+    /// Find connected components in the graph.
+    /// Returns a list of components, each being a list of entity IDs.
+    pub fn kg_connected_components(&self) -> Result<Vec<Vec<i64>>> {
+        algorithms::connected_components(&self.conn)
+    }
+
+    /// Run full graph analysis (PageRank + Louvain + Connected Components).
+    pub fn kg_analyze(&self) -> Result<algorithms::GraphAnalysis> {
+        algorithms::analyze_graph(&self.conn)
     }
 }
 

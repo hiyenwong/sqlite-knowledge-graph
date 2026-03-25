@@ -13,6 +13,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.0] - 2026-03-25
+
+### Added
+
+- **Graph Algorithms Module** (`src/algorithms/`)
+  - `pagerank()` - PageRank centrality with configurable damping
+  - `louvain_communities()` - Community detection via modularity optimization
+  - `connected_components()` - Weakly connected components
+  - `strongly_connected_components()` - Kosaraju's SCC algorithm
+  - `analyze_graph()` - Full graph analysis (PageRank + Louvain + Components)
+
+- **New Types**
+  - `PageRankConfig` - PageRank configuration (damping, iterations, tolerance)
+  - `CommunityResult` - Community memberships and modularity score
+  - `GraphAnalysis` - Complete graph analysis results
+
+- **KnowledgeGraph API**
+  - `kg_pagerank()` - Compute centrality scores
+  - `kg_louvain()` - Detect communities
+  - `kg_connected_components()` - Find connected components
+  - `kg_analyze()` - Run full analysis
+
+### Technical
+
+- 38 tests passing (33 unit + 5 integration)
+- Full graph algorithm coverage
+
+---
+
 ## [0.4.0] - 2026-03-25
 
 ### Added
