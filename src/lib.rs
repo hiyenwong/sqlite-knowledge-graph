@@ -7,9 +7,19 @@
 //! - Custom SQLite functions for direct SQL operations
 //! - RAG (Retrieval-Augmented Generation) query functions
 //! - Graph algorithms (PageRank, Louvain, Connected Components)
+//!
+//! ## SQLite Extension
+//!
+//! This crate can be compiled as a SQLite loadable extension:
+//! ```bash
+//! cargo build --release
+//! sqlite3 db.db ".load ./target/release/libsqlite_knowledge_graph.dylib"
+//! sqlite3 db.db "SELECT kg_version();"
+//! ```
 
 pub mod algorithms;
 pub mod error;
+pub mod extension;
 pub mod functions;
 pub mod graph;
 pub mod migrate;
@@ -21,6 +31,7 @@ pub use algorithms::{
     PageRankConfig,
 };
 pub use error::{Error, Result};
+pub use extension::register_functions as register_extension_functions;
 pub use functions::register_functions;
 pub use graph::{Direction, GraphStats, PathStep, TraversalNode, TraversalPath, TraversalQuery};
 pub use graph::{Entity, Neighbor, Relation};

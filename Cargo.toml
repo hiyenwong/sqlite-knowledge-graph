@@ -3,8 +3,12 @@ name = "sqlite-knowledge-graph"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "sqlite_knowledge_graph"
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
-rusqlite = { version = "0.32", features = ["functions", "blob", "bundled"] }
+rusqlite = { version = "0.32", features = ["functions", "blob", "bundled", "load_extension"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "1.0"

@@ -13,6 +13,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.0] - 2026-03-25
+
+### Added
+
+- **SQLite Extension Support** (experimental)
+  - `src/extension.rs` - Extension entry points for macOS/Linux
+  - Can be compiled as loadable extension (.dylib/.so)
+  - Functions: kg_version, kg_stats, kg_search, kg_bfs, kg_shortest_path, kg_pagerank, kg_louvain, kg_connected_components
+
+### Known Issues
+
+- Extension loading may cause SIGSEGV on some platforms
+- Recommend using CLI tool (`sqlite-kg`) or Rust API instead
+
+### Technical
+
+- Added `load_extension` feature to rusqlite
+- Compiled extension at: `target/release/libsqlite_knowledge_graph.dylib`
+
+---
+
 ## [0.5.0] - 2026-03-25
 
 ### Added
