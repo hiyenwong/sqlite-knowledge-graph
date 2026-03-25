@@ -8,9 +8,7 @@
 
 use rand::Rng;
 use sqlite_knowledge_graph::vector::{LinearScanIndex, TurboQuantConfig, TurboQuantIndex};
-use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
 use std::time::Instant;
 
 // Test dimensions
@@ -83,8 +81,8 @@ fn test_different_dimensions() {
             seed: 42,
         };
 
-        let index = TurboQuantIndex::new(config).unwrap();
-        assert_eq!(index.config.dimension, dimension);
+        let mut index = TurboQuantIndex::new(config.clone()).unwrap();
+        assert_eq!(index.config().dimension, dimension);
 
         let vector = generate_random_vector(dimension);
         index.add_vector(1, &vector).unwrap();
@@ -105,8 +103,8 @@ fn test_different_bit_widths() {
             seed: 42,
         };
 
-        let index = TurboQuantIndex::new(config).unwrap();
-        assert_eq!(index.config.bit_width, bit_width);
+        let mut index = TurboQuantIndex::new(config.clone()).unwrap();
+        assert_eq!(index.config().bit_width, bit_width);
 
         let vector = generate_random_vector(dimension);
         index.add_vector(1, &vector).unwrap();
@@ -193,8 +191,8 @@ fn test_persistence() {
     let loaded_index = TurboQuantIndex::load(test_path).unwrap();
 
     assert_eq!(loaded_index.len(), index.len());
-    assert_eq!(loaded_index.config.dimension, index.config.dimension);
-    assert_eq!(loaded_index.config.bit_width, index.config.bit_width);
+    assert_eq!(loaded_index.config().dimension, index.config().dimension);
+    assert_eq!(loaded_index.config().bit_width, index.config().bit_width);
 
     // Verify search results match
     let query = generate_random_vector(384);
@@ -308,7 +306,7 @@ fn test_performance_benchmark() {
                     linear_search_time_ms: linear_search_time,
                     turbo_memory_bytes: turbo_memory,
                     linear_memory_bytes: linear_memory,
-                    recall_rate,
+                    recall_rate: recall_rate as f64,
                     compression_ratio,
                 });
             }

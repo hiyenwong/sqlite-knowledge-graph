@@ -48,6 +48,98 @@ pub struct TurboQuantIndex {
     vector_norms: HashMap<i64, f32>,
 }
 
+/// Linear scan index for comparison (exact search)
+pub struct LinearScanIndex {
+    config: TurboQuantConfig,
+    vectors: HashMap<i64, Vec<f32>>,
+}
+
+impl LinearScanIndex {
+    /// Create a new linear scan index
+    pub fn new(config: TurboQuantConfig) -> Result<Self> {
+        Ok(Self {
+            config,
+            vectors: HashMap::new(),
+        })
+    }
+
+    /// Add a vector to the index
+    pub fn add_vector(&mut self, entity_id: i64, vector: &[f32]) -> Result<()> {
+        if vector.len() != self.config.dimension {
+            return Err(Error::InvalidVectorDimension {
+                expected: self.config.dimension,
+                actual: vector.len(),
+            });
+        }
+        self.vectors.insert(entity_id, vector.to_vec());
+        Ok(())
+    }
+
+    /// Search for k nearest neighbors using exact cosine similarity
+    pub fn search(&self, query: &[f32], k: usize) -> Result<Vec<(i64, f32)>> {
+        if query.len() != self.config.dimension {
+            return Err(Error::InvalidVectorDimension {
+                expected: self.config.dimension,
+                actual: query.len(),
+            });
+        }
+
+        let query_norm: f32 = query.iter().map(|x| x * x).sum::<f32>().sqrt();
+
+        let mut results: Vec<(i64, f32)> = self
+            .vectors
+            .iter()
+            .map(|(&entity_id, vector)| {
+                let dot_product: f32 = query.iter().zip(vector.iter()).map(|(a, b)| a * b).sum();
+                let target_norm: f32 = vector.iter().map(|x| x * x).sum::<f32>().sqrt();
+                let similarity = if query_norm > 0.0 && target_norm > 0.0 {
+                    dot_product / (query_norm * target_norm)
+                } else {
+                    0.0
+                };
+                (entity_id, similarity)
+            })
+            .collect();
+
+        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        results.truncate(k);
+
+        Ok(results)
+    }
+
+    /// Get index statistics
+    pub fn stats(&self) -> LinearScanStats {
+        LinearScanStats {
+            num_vectors: self.vectors.len(),
+            dimension: self.config.dimension,
+            bytes_per_vector: self.config.dimension * 4, // f32 = 4 bytes
+        }
+    }
+
+    /// Clear the index
+    pub fn clear(&mut self) {
+        self.vectors.clear();
+    }
+
+    /// Get number of vectors
+    pub fn len(&self) -> usize {
+        self.vectors.len()
+    }
+
+    /// Check if index is empty
+    pub fn is_empty(&self) -> bool {
+        self.vectors.is_empty()
+    }
+}
+
+/// Statistics about a LinearScan index
+#[derive(Debug, Clone)]
+pub struct LinearScanStats {
+    pub num_vectors: usize,
+    pub dimension: usize,
+    pub bytes_per_vector: usize,
+}
+
 impl TurboQuantIndex {
     /// Create a new TurboQuant index
     pub fn new(config: TurboQuantConfig) -> Result<Self> {
@@ -271,6 +363,14 @@ impl TurboQuantIndex {
         }
     }
 
+    /// Batch add vectors to the index
+    pub fn add_vectors_batch(&mut self, vectors: &[(i64, Vec<f32>)]) -> Result<()> {
+        for (entity_id, vector) in vectors {
+            self.add_vector(*entity_id, vector)?;
+        }
+        Ok(())
+    }
+
     /// Get index statistics
     pub fn stats(&self) -> TurboQuantStats {
         TurboQuantStats {
@@ -293,6 +393,40 @@ impl TurboQuantIndex {
     pub fn clear(&mut self) {
         self.quantized_vectors.clear();
         self.vector_norms.clear();
+    }
+
+    /// Get number of vectors
+    pub fn len(&self) -> usize {
+        self.quantized_vectors.len()
+    }
+
+    /// Check if index is empty
+    pub fn is_empty(&self) -> bool {
+        self.quantized_vectors.is_empty()
+    }
+
+    /// Save index to file
+    pub fn save<P: AsRef<std::path::Path>>(&self, path: P) -> Result<()> {
+        let serialized = serde_json::to_string(self)?;
+        std::fs::write(path, serialized)?;
+        Ok(())
+    }
+
+    /// Load index from file
+    pub fn load<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
+        let contents = std::fs::read_to_string(path)?;
+        let index: Self = serde_json::from_str(&contents)?;
+        Ok(index)
+    }
+
+    /// Get the config
+    pub fn config(&self) -> &TurboQuantConfig {
+        &self.config
+    }
+
+    /// Batch search for multiple queries
+    pub fn search_batch(&self, queries: &[Vec<f32>], k: usize) -> Result<Vec<Vec<(i64, f32)>>> {
+        queries.iter().map(|query| self.search(query, k)).collect()
     }
 }
 
