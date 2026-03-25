@@ -9,7 +9,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 sqlite-loadable = "0.0.6-alpha.6"
-rusqlite = { version = "0.32", features = ["functions", "blob", "bundled"] }
+rusqlite = { version = "0.32", features = ["functions", "blob"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "1.0"
@@ -18,6 +18,11 @@ tracing = "0.1"
 [dev-dependencies]
 tempfile = "3.10"
 shellexpand = "3.1"
+
+[features]
+default = []
+# Enable bundled SQLite (conflicts with sqlite-loadable extension)
+bundled = ["rusqlite/bundled"]
 
 [profile.release]
 strip = true
