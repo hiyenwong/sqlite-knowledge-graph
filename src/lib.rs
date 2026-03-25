@@ -31,7 +31,7 @@ pub use algorithms::{
     PageRankConfig,
 };
 pub use error::{Error, Result};
-pub use extension::register_functions as register_extension_functions;
+pub use extension::sqlite3_sqlite_knowledge_graph_init;
 pub use functions::register_functions;
 pub use graph::{Direction, GraphStats, PathStep, TraversalNode, TraversalPath, TraversalQuery};
 pub use graph::{Entity, Neighbor, Relation};
