@@ -71,7 +71,7 @@ This document summarizes the implementation of additional SQLite extension funct
 SELECT load_extension('./libsqlite_knowledge_graph.dylib', 'sqlite3_sqlite_knowledge_graph_init');
 
 -- Get version
-SELECT kg_version();  -- Returns: "0.1.0"
+SELECT kg_version();  -- Returns: "0.7.0"
 
 -- PageRank with custom parameters
 SELECT kg_pagerank(0.85, 100, 1e-6);

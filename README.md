@@ -36,11 +36,20 @@ A Rust library for building and querying knowledge graphs using SQLite as the ba
 
 ## Installation
 
+> **Note**: This crate is not yet published to [crates.io](https://crates.io). Use git dependency or local path for now.
+
 Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-sqlite-knowledge-graph = "0.5"
+sqlite-knowledge-graph = { git = "https://github.com/yourusername/sqlite-knowledge-graph" }
+```
+
+Or for local development:
+
+```toml
+[dependencies]
+sqlite-knowledge-graph = { path = "../sqlite-knowledge-graph" }
 ```
 
 ### Building SQLite Extension
@@ -202,7 +211,7 @@ SELECT load_extension('./libsqlite_knowledge_graph', 'sqlite3_sqlite_knowledge_g
 
 -- Get version
 SELECT kg_version();
--- Returns: "0.1.0"
+-- Returns: "0.7.0"
 
 -- Get stats
 SELECT kg_stats();
@@ -326,7 +335,7 @@ Benchmarks on a knowledge graph with 2,619 entities and 1.48M relations:
 | SQLite Extension | ✅ Complete |
 | CLI Tool | ✅ Complete |
 | GitHub Actions CI | ✅ Complete |
-| More Extension Functions | ✅ Complete (v0.1.0) |
+| More Extension Functions | ✅ Complete (v0.7.0) |
 | Vector Indexing | ⏳ Planned |
 | Higher-order Relations | ⏳ Planned |
 | Graph Visualization Export | ⏳ Planned |
