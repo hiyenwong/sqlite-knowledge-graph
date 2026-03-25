@@ -336,7 +336,7 @@ Benchmarks on a knowledge graph with 2,619 entities and 1.48M relations:
 | CLI Tool | ✅ Complete |
 | GitHub Actions CI | ✅ Complete |
 | More Extension Functions | ✅ Complete (v0.7.0) |
-| Vector Indexing | ⏳ Planned |
+| **Vector Indexing (TurboQuant)** | ✅ **Complete (v0.8.0)** |
 | Higher-order Relations | ⏳ Planned |
 | Graph Visualization Export | ⏳ Planned |
 | Async API | ⏳ Planned |

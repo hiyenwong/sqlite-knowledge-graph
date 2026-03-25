@@ -33,6 +33,9 @@ pub enum Error {
     #[error("Invalid entity type: {0}")]
     InvalidEntityType(String),
 
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+
     #[error("Database is closed")]
     DatabaseClosed,
 

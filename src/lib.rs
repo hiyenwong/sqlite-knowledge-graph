@@ -40,6 +40,7 @@ pub use migrate::{
 };
 pub use schema::{create_schema, schema_exists};
 pub use vector::{cosine_similarity, SearchResult, VectorStore};
+pub use vector::{TurboQuantConfig, TurboQuantIndex, TurboQuantStats};
 
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
@@ -166,6 +167,118 @@ impl KnowledgeGraph {
     pub fn search_vectors(&self, query: Vec<f32>, k: usize) -> Result<Vec<SearchResult>> {
         let store = VectorStore::new();
         store.search_vectors(&self.conn, query, k)
+    }
+
+    // ========== TurboQuant Vector Index ==========
+
+    /// Create a TurboQuant index for fast approximate nearest neighbor search.
+    ///
+    /// TurboQuant provides:
+    /// - Instant indexing (no training required)
+    /// - 6x memory compression
+    /// - Near-zero accuracy loss
+    ///
+    /// # Arguments
+    /// * `config` - Optional configuration (uses defaults if None)
+    ///
+    /// # Example
+    /// ```ignore
+    /// let config = TurboQuantConfig {
+    ///     dimension: 384,
+    ///     bit_width: 3,
+    ///     seed: 42,
+    /// };
+    /// let mut index = kg.create_turboquant_index(Some(config))?;
+    ///
+    /// // Add vectors to index
+    /// for (entity_id, vector) in all_vectors {
+    ///     index.add_vector(entity_id, &vector)?;
+    /// }
+    ///
+    /// // Fast search
+    /// let results = index.search(&query_vector, 10)?;
+    /// ```
+    pub fn create_turboquant_index(
+        &self,
+        config: Option<TurboQuantConfig>,
+    ) -> Result<TurboQuantIndex> {
+        let config = config.unwrap_or_else(|| TurboQuantConfig {
+            dimension: 384,
+            bit_width: 3,
+            seed: 42,
+        });
+
+        TurboQuantIndex::new(config)
+    }
+
+    /// Build a TurboQuant index from all existing vectors in the database.
+    /// This is a convenience method that loads all vectors and indexes them.
+    pub fn build_turboquant_index(
+        &self,
+        config: Option<TurboQuantConfig>,
+    ) -> Result<TurboQuantIndex> {
+        // Get dimension from first vector
+        let dimension = self.get_vector_dimension()?.unwrap_or(384);
+
+        let config = config.unwrap_or_else(|| TurboQuantConfig {
+            dimension,
+            bit_width: 3,
+            seed: 42,
+        });
+
+        let mut index = TurboQuantIndex::new(config)?;
+
+        // Load all vectors
+        let vectors = self.load_all_vectors()?;
+
+        for (entity_id, vector) in vectors {
+            index.add_vector(entity_id, &vector)?;
+        }
+
+        Ok(index)
+    }
+
+    /// Get the dimension of stored vectors (if any exist).
+    fn get_vector_dimension(&self) -> Result<Option<usize>> {
+        let result = self
+            .conn
+            .query_row("SELECT dimension FROM kg_vectors LIMIT 1", [], |row| {
+                row.get::<_, i64>(0)
+            });
+
+        match result {
+            Ok(dim) => Ok(Some(dim as usize)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Load all vectors from the database.
+    fn load_all_vectors(&self) -> Result<Vec<(i64, Vec<f32>)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT entity_id, vector, dimension FROM kg_vectors")?;
+
+        let rows = stmt.query_map([], |row| {
+            let entity_id: i64 = row.get(0)?;
+            let vector_blob: Vec<u8> = row.get(1)?;
+            let dimension: i64 = row.get(2)?;
+
+            let mut vector = Vec::with_capacity(dimension as usize);
+            for chunk in vector_blob.chunks_exact(4) {
+                let bytes: [u8; 4] = chunk.try_into().unwrap();
+                vector.push(f32::from_le_bytes(bytes));
+            }
+
+            Ok((entity_id, vector))
+        })?;
+
+        let mut vectors = Vec::new();
+        for row in rows {
+            vectors.push(row?);
+        }
+
+        Ok(vectors)
     }
 
     // ========== RAG Query Functions ==========

@@ -13,6 +13,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.0] - 2026-03-25
+
+### Added
+
+- **TurboQuant Vector Indexing** - Near-optimal vector quantization for instant search
+  - `TurboQuantIndex` - Fast approximate nearest neighbor search
+  - `TurboQuantConfig` - Configurable dimension, bit_width, and seed
+  - `KnowledgeGraph::create_turboquant_index()` - Create new index
+  - `KnowledgeGraph::build_turboquant_index()` - Build from existing vectors
+  - **Benefits:**
+    - Instant indexing (no training required)
+    - 6x memory compression
+    - Near-zero accuracy loss
+    - Up to 184,000x faster indexing vs Product Quantization
+
+### Technical
+
+- Added `rand` and `ndarray` dependencies
+- New module: `src/vector/turboquant.rs`
+- 4 new tests for TurboQuant functionality
+- Total: 43 tests passing
+
+### References
+
+- Based on arXiv:2504.19874 (ICLR 2026)
+- Google Research: "TurboQuant: Redefining AI efficiency with extreme compression"
+
+---
+
 ## [0.7.0] - 2026-03-25
 
 ### Added
