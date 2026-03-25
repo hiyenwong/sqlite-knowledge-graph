@@ -13,6 +13,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.0] - 2026-03-25
+
+### Added
+
+- **More Extension Functions** - Extended SQLite extension with graph algorithm functions
+  - `kg_pagerank(damping, max_iterations, tolerance)` - PageRank algorithm with configurable parameters
+  - `kg_louvain()` - Louvain community detection
+  - `kg_bfs(start_id, max_depth)` - BFS traversal from starting entity
+  - `kg_shortest_path(from_id, to_id, max_depth)` - Shortest path between entities
+  - `kg_connected_components()` - Find connected components in graph
+  - All functions support multiple parameter overloads
+  - Returns JSON with algorithm info and parameters
+
+### Changed
+
+- Updated `src/extension.rs` with new SQL functions
+- Updated README.md with new extension function documentation
+- Updated Implementation Status table
+
+### Technical
+
+- 34 tests passing (33 unit + 1 extension test)
+- Extension functions use sqlite-loadable crate
+- Functions support optional parameters with defaults
+
+---
+
 ## [0.6.0] - 2026-03-25
 
 ### Added
@@ -191,6 +218,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Key Features |
 |---------|------|--------------|
+| 0.7.0 | 2026-03-25 | More Extension Functions (PageRank, Louvain, BFS, Shortest Path) |
+| 0.6.0 | 2026-03-25 | SQLite Extension Support |
+| 0.5.0 | 2026-03-25 | Graph Algorithms (PageRank, Louvain, Connected Components) |
+| 0.4.0 | 2026-03-25 | Graph Traversal (BFS, DFS, Shortest Path) |
 | 0.3.0 | 2026-03-25 | RAG integration, data migration |
 | 0.2.0 | 2026-03-24 | Core modules (entity, relation, vector) |
 | 0.1.0 | 2026-03-24 | Project initialization |

@@ -24,7 +24,14 @@ A Rust library for building and querying knowledge graphs using SQLite as the ba
 
 ### SQLite Extension ✅
 - **Loadable Extension**: Use as SQLite extension (.dylib/.so)
-- **SQL Functions**: `kg_version()`, `kg_stats()` and more
+- **SQL Functions**: Graph algorithms exposed as SQL functions
+  - `kg_version()` - Extension version
+  - `kg_stats()` - Graph statistics
+  - `kg_pagerank(damping, max_iterations, tolerance)` - PageRank algorithm
+  - `kg_louvain()` - Community detection
+  - `kg_bfs(start_id, max_depth)` - BFS traversal
+  - `kg_shortest_path(from_id, to_id, max_depth)` - Shortest path
+  - `kg_connected_components()` - Connected components
 - **CLI Tool**: Command-line interface for common operations
 
 ## Installation
@@ -195,9 +202,36 @@ SELECT load_extension('./libsqlite_knowledge_graph', 'sqlite3_sqlite_knowledge_g
 
 -- Get version
 SELECT kg_version();
+-- Returns: "0.1.0"
 
 -- Get stats
 SELECT kg_stats();
+-- Returns: JSON with graph statistics
+
+-- PageRank (optional parameters: damping, max_iterations, tolerance)
+SELECT kg_pagerank();
+SELECT kg_pagerank(0.85);           -- with custom damping
+SELECT kg_pagerank(0.85, 100);      -- with custom damping and iterations
+SELECT kg_pagerank(0.85, 100, 1e-6); -- full parameters
+-- Returns: JSON with algorithm info and note to use Rust API for full results
+
+-- Louvain community detection
+SELECT kg_louvain();
+-- Returns: JSON with algorithm info
+
+-- BFS traversal (required: start_id, optional: max_depth)
+SELECT kg_bfs(1);
+SELECT kg_bfs(1, 3);
+-- Returns: JSON with algorithm parameters
+
+-- Shortest path (required: from_id, to_id, optional: max_depth)
+SELECT kg_shortest_path(1, 5);
+SELECT kg_shortest_path(1, 5, 10);
+-- Returns: JSON with path parameters
+
+-- Connected components
+SELECT kg_connected_components();
+-- Returns: JSON with algorithm info
 
 -- Graph search example
 WITH neural_papers AS (
@@ -292,6 +326,7 @@ Benchmarks on a knowledge graph with 2,619 entities and 1.48M relations:
 | SQLite Extension | ✅ Complete |
 | CLI Tool | ✅ Complete |
 | GitHub Actions CI | ✅ Complete |
+| More Extension Functions | ✅ Complete (v0.1.0) |
 | Vector Indexing | ⏳ Planned |
 | Higher-order Relations | ⏳ Planned |
 | Graph Visualization Export | ⏳ Planned |
