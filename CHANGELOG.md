@@ -13,6 +13,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0] - 2026-03-26
+
+### Added
+
+- **Vector Embedding Generation** - Real embeddings with sentence-transformers
+  - `EmbeddingGenerator` - Generate embeddings using `all-MiniLM-L6-v2` (384 dimensions)
+  - `sqlite-kg embed` CLI command - Generate embeddings for papers and skills
+  - Batch processing (100 entities/batch)
+  - Incremental mode - Skip entities with existing real embeddings
+  - `--force` flag - Regenerate all embeddings
+
+### Changed
+
+- **Search Command Fixed** - Now uses real query embeddings instead of dummy vectors
+  - Semantic search similarity scores now in 0.7-0.8+ range (previously 0.05-0.07)
+  - Results are highly relevant to query
+
+### Technical
+
+- New module: `src/embed.rs` (~400 lines)
+- Python integration via subprocess for sentence-transformers
+- 20 new unit tests for embedding functionality
+- Integration test with dependency check
+- Total: 60 tests passing
+
+### Usage
+
+```bash
+# Generate embeddings
+sqlite-kg embed --db kg.db
+
+# Generate for papers only
+sqlite-kg embed --db kg.db --papers
+
+# Force regenerate all
+sqlite-kg embed --db kg.db --force
+
+# Semantic search
+sqlite-kg search "brain network" --k 5 --db kg.db
+```
+
+### Dependencies
+
+- Requires `sentence-transformers` Python package
+- Virtual environment recommended: `python3 -m venv .venv && pip install sentence-transformers`
+
+---
+
 ## [0.8.0] - 2026-03-25
 
 ### Added

@@ -255,8 +255,11 @@ fn run_search(args: &[String]) -> Result<(), Error> {
 
     let kg = KnowledgeGraph::open(&db_path)?;
 
-    // Generate a random embedding for now (in real use, would use an embedding model)
-    let embedding = generate_dummy_embedding();
+    // Generate embedding for the query using sentence-transformers
+    let generator = sqlite_knowledge_graph::EmbeddingGenerator::new();
+    let embeddings = generator.generate_embeddings(vec![query.clone()])
+        .map_err(|e| Error::Other(format!("Failed to generate query embedding: {}", e)))?;
+    let embedding = embeddings.into_iter().next().unwrap_or_else(|| vec![0.0; 384]);
 
     println!("🔍 Searching for: {}", query);
     println!();
