@@ -14,6 +14,7 @@ fn main() -> Result<(), Error> {
 
     match command.as_str() {
         "migrate" => run_migrate(&args),
+        "embed" => run_embed(&args),
         "search" => run_search(&args),
         "stats" => run_stats(&args),
         "context" => run_context(&args),
@@ -32,12 +33,16 @@ fn print_usage() {
     println!();
     println!("Commands:");
     println!("  migrate      Migrate data from Aerial's knowledge base");
+    println!("  embed        Generate vector embeddings for entities");
     println!("  search       Semantic search with optional RAG context");
     println!("  stats        Show statistics about the knowledge graph");
     println!("  context      Get graph context for an entity");
     println!();
     println!("Migration command:");
     println!("  sqlite-kg migrate --source <knowledge.db> --skills <skills_dir> --target <kg.db>");
+    println!();
+    println!("Embed command:");
+    println!("  sqlite-kg embed --db <kg.db> [--papers] [--skills] [--all]");
     println!();
     println!("Search command:");
     println!("  sqlite-kg search <query> --k <num> --db <kg.db>");
@@ -108,6 +113,102 @@ fn run_migrate(args: &[String]) -> Result<(), Error> {
     println!("  Papers migrated: {}", stats.papers_count);
     println!("  Skills migrated: {}", stats.skills_count);
     println!("  Relations built: {}", stats.relations_count);
+
+    Ok(())
+}
+
+fn run_embed(args: &[String]) -> Result<(), Error> {
+    let mut db_path = "kg.db".to_string();
+    let mut papers_only = false;
+    let mut skills_only = false;
+    let mut force = false;
+
+    let mut i = 2;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--db" => {
+                i += 1;
+                if i < args.len() {
+                    db_path = args[i].clone();
+                }
+            }
+            "--papers" => {
+                papers_only = true;
+            }
+            "--skills" => {
+                skills_only = true;
+            }
+            "--all" => {
+                papers_only = false;
+                skills_only = false;
+            }
+            "--force" => {
+                force = true;
+            }
+            _ => {
+                eprintln!("Unknown option: {}", args[i]);
+                std::process::exit(1);
+            }
+        }
+        i += 1;
+    }
+
+    println!("🔮 Starting embedding generation...");
+    println!("  Database: {}", db_path);
+    if force {
+        println!("  Mode: force (regenerate all embeddings)");
+    } else {
+        println!("  Mode: incremental (skip entities with real embeddings)");
+    }
+    println!();
+
+    // Check dependencies
+    println!("Checking dependencies...");
+    match sqlite_knowledge_graph::check_dependencies() {
+        Ok(true) => {
+            println!("✓ sentence-transformers is available");
+        }
+        Ok(false) => {
+            println!("✗ sentence-transformers not found");
+            println!();
+            println!("To install required dependencies:");
+            println!("  pip install sentence-transformers");
+            println!();
+            return Err(Error::Other(
+                "sentence-transformers not installed. Run: pip install sentence-transformers"
+                    .to_string(),
+            ));
+        }
+        Err(e) => {
+            println!("✗ Failed to check dependencies: {}", e);
+            return Err(e);
+        }
+    }
+    println!();
+
+    // Open the knowledge graph
+    let kg = KnowledgeGraph::open(&db_path)?;
+    println!("✓ Opened knowledge graph database");
+    println!();
+
+    let generator = sqlite_knowledge_graph::EmbeddingGenerator::new().with_force(force);
+
+    let stats = if papers_only {
+        generator.generate_for_papers(kg.connection())?
+    } else if skills_only {
+        generator.generate_for_skills(kg.connection())?
+    } else {
+        generator.generate_for_all(kg.connection())?
+    };
+
+    println!();
+    println!("✓ Embedding generation completed successfully!");
+    println!();
+    println!("Statistics:");
+    println!("  Total entities: {}", stats.total_count);
+    println!("  Processed:      {}", stats.processed_count);
+    println!("  Skipped:        {}", stats.skipped_count);
+    println!("  Dimension:      {}", stats.dimension);
 
     Ok(())
 }

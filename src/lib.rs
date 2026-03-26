@@ -18,6 +18,7 @@
 //! ```
 
 pub mod algorithms;
+pub mod embed;
 pub mod error;
 pub mod extension;
 pub mod functions;
@@ -29,6 +30,10 @@ pub mod vector;
 pub use algorithms::{
     analyze_graph, connected_components, louvain_communities, pagerank, CommunityResult,
     PageRankConfig,
+};
+pub use embed::{
+    check_dependencies, get_entities_needing_embedding, EmbeddingConfig, EmbeddingGenerator,
+    EmbeddingStats,
 };
 pub use error::{Error, Result};
 pub use extension::sqlite3_sqlite_knowledge_graph_init;
