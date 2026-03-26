@@ -60,7 +60,10 @@ pub fn pagerank(conn: &Connection, config: PageRankConfig) -> Result<Vec<(i64, f
     for _ in 0..config.max_iterations {
         let dangling_sum: f64 = all_nodes
             .iter()
-            .filter(|&&id| out_edges.get(&id).is_none_or(|edges| edges.is_empty()))
+            .filter(|&&id| match out_edges.get(&id) {
+                None => true,
+                Some(edges) => edges.is_empty(),
+            })
             .map(|&id| scores[&id])
             .sum();
 

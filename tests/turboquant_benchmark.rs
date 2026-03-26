@@ -359,7 +359,7 @@ fn generate_comparison_report(results: &[BenchmarkResults]) {
         "- **Average Search Speedup:** {:.2}x\n",
         avg_speedup_search
     ));
-    report.push_str("\n");
+    report.push('\n');
 
     // Detailed results by dimension
     report.push_str("## Detailed Results\n\n");
@@ -390,7 +390,7 @@ fn generate_comparison_report(results: &[BenchmarkResults]) {
                     r.compression_ratio
                 ));
             }
-            report.push_str("\n");
+            report.push('\n');
         }
     }
 

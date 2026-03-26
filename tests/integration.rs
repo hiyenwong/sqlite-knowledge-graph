@@ -90,7 +90,7 @@ fn test_integration_with_aerial_backup() {
     let query = vec![0.5; 10];
     let results = kg.search_vectors(query, 3).unwrap();
     assert!(results.len() <= 3);
-    assert!(results.len() > 0);
+    assert!(!results.is_empty());
     println!("Vector search returned {} results", results.len());
 
     for result in results {
