@@ -1,8 +1,8 @@
 //! Integration tests using the Aerial knowledge backup data.
 
 use rusqlite::Connection;
-use sqlite_knowledge_graph::{cosine_similarity, Entity, KnowledgeGraph, Relation};
-use sqlite_knowledge_graph::{EmbeddingGenerator, EmbeddingConfig};
+use sqlite_knowledge_graph::EmbeddingGenerator;
+use sqlite_knowledge_graph::{Entity, KnowledgeGraph, Relation};
 
 #[test]
 fn test_integration_with_aerial_backup() {
@@ -129,7 +129,8 @@ fn test_embedding_generation() {
             name TEXT NOT NULL
         )",
         [],
-    ).unwrap();
+    )
+    .unwrap();
 
     // Create the vectors table
     conn.execute(
@@ -140,12 +141,17 @@ fn test_embedding_generation() {
             FOREIGN KEY (entity_id) REFERENCES kg_entities(id)
         )",
         [],
-    ).unwrap();
+    )
+    .unwrap();
 
     let generator = EmbeddingGenerator::new();
 
     // Insert a mock entity into the database
-    conn.execute("INSERT INTO kg_entities (entity_type, name) VALUES ('paper', 'A Study on Embeddings')", []).unwrap();
+    conn.execute(
+        "INSERT INTO kg_entities (entity_type, name) VALUES ('paper', 'A Study on Embeddings')",
+        [],
+    )
+    .unwrap();
 
     // Generate embeddings
     let embedding_stats = generator.generate_for_papers(&conn).unwrap();

@@ -257,9 +257,13 @@ fn run_search(args: &[String]) -> Result<(), Error> {
 
     // Generate embedding for the query using sentence-transformers
     let generator = sqlite_knowledge_graph::EmbeddingGenerator::new();
-    let embeddings = generator.generate_embeddings(vec![query.clone()])
+    let embeddings = generator
+        .generate_embeddings(vec![query.clone()])
         .map_err(|e| Error::Other(format!("Failed to generate query embedding: {}", e)))?;
-    let embedding = embeddings.into_iter().next().unwrap_or_else(|| vec![0.0; 384]);
+    let embedding = embeddings
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| vec![0.0; 384]);
 
     println!("🔍 Searching for: {}", query);
     println!();
@@ -433,21 +437,4 @@ fn run_context(args: &[String]) -> Result<(), Error> {
     }
 
     Ok(())
-}
-
-fn generate_dummy_embedding() -> Vec<f32> {
-    // Generate a random embedding (in real use, would use an embedding model)
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let seed = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos() as u32;
-
-    let mut rng = seed;
-    (0..384)
-        .map(|_| {
-            rng = rng.wrapping_mul(1664525).wrapping_add(1013904223);
-            (rng as f32) / (u32::MAX as f32)
-        })
-        .collect()
 }

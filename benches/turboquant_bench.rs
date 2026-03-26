@@ -55,7 +55,10 @@ fn benchmark_indexing(c: &mut Criterion) {
             );
 
             group.bench_with_input(
-                BenchmarkId::new("linear_scan", format!("dim={}_n={}", dimension, num_vectors)),
+                BenchmarkId::new(
+                    "linear_scan",
+                    format!("dim={}_n={}", dimension, num_vectors),
+                ),
                 &(dimension, num_vectors),
                 |b, (dim, n)| {
                     let config = TurboQuantConfig {
@@ -126,7 +129,10 @@ fn benchmark_search(c: &mut Criterion) {
             );
 
             group.bench_with_input(
-                BenchmarkId::new("linear_scan", format!("dim={}_n={}", dimension, num_vectors)),
+                BenchmarkId::new(
+                    "linear_scan",
+                    format!("dim={}_n={}", dimension, num_vectors),
+                ),
                 &(linear_index, query.clone()),
                 |b, (index, query)| {
                     b.iter(|| {

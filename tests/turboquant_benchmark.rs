@@ -14,6 +14,7 @@ use std::time::Instant;
 // Test dimensions
 const TEST_DIMENSIONS: &[usize] = &[64, 128, 384, 768, 1536];
 const TEST_BIT_WIDTHS: &[usize] = &[1, 2, 3, 4];
+#[allow(dead_code)]
 const VECTOR_COUNTS: &[usize] = &[10, 100, 1000];
 
 // Generate random normalized vector
@@ -424,9 +425,10 @@ fn generate_comparison_report(results: &[BenchmarkResults]) {
     report.push_str("- **Training:** Data-oblivious, no training required\n");
     report.push_str("- **Complexity:** O(nd) indexing, O(nd) search (vs O(nd) for linear scan with larger constants)\n\n");
 
-    // Save report
-    let report_path = "/Users/hiyenwong/.openclaw/workspace/projects/sqlite-knowledge-graph-gh/tests/comparison_report.md";
-    fs::write(report_path, report).expect("Failed to write comparison report");
-
-    println!("\n✅ Comparison report saved to: {}", report_path);
+    // Save report (only if directory exists)
+    let report_path = std::env::temp_dir().join("sqlite_kg_comparison_report.md");
+    match fs::write(&report_path, &report) {
+        Ok(_) => println!("\n✅ Comparison report saved to: {}", report_path.display()),
+        Err(e) => println!("\n⚠️ Could not save comparison report: {}", e),
+    }
 }

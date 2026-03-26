@@ -4,4 +4,6 @@ pub mod store;
 pub mod turboquant;
 
 pub use store::{cosine_similarity, SearchResult, VectorStore};
-pub use turboquant::{LinearScanIndex, LinearScanStats, TurboQuantConfig, TurboQuantIndex, TurboQuantStats};
+pub use turboquant::{
+    LinearScanIndex, LinearScanStats, TurboQuantConfig, TurboQuantIndex, TurboQuantStats,
+};
