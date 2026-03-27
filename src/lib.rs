@@ -32,12 +32,12 @@ pub use algorithms::{
     analyze_graph, connected_components, louvain_communities, pagerank, CommunityResult,
     PageRankConfig,
 };
-pub use export::{D3ExportGraph, D3ExportMetadata, D3Link, D3Node};
 pub use embed::{
     check_dependencies, get_entities_needing_embedding, EmbeddingConfig, EmbeddingGenerator,
     EmbeddingStats,
 };
 pub use error::{Error, Result};
+pub use export::{D3ExportGraph, D3ExportMetadata, D3Link, D3Node};
 pub use extension::sqlite3_sqlite_knowledge_graph_init;
 pub use functions::register_functions;
 pub use graph::{Direction, GraphStats, PathStep, TraversalNode, TraversalPath, TraversalQuery};

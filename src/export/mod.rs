@@ -68,9 +68,8 @@ pub fn export_d3_json(conn: &Connection) -> Result<D3ExportGraph> {
 }
 
 fn query_nodes(conn: &Connection) -> Result<Vec<D3Node>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, entity_type, name, properties FROM kg_entities ORDER BY id",
-    )?;
+    let mut stmt =
+        conn.prepare("SELECT id, entity_type, name, properties FROM kg_entities ORDER BY id")?;
 
     let rows = stmt.query_map([], |row| {
         let id: i64 = row.get(0)?;
@@ -97,9 +96,8 @@ fn query_nodes(conn: &Connection) -> Result<Vec<D3Node>> {
 }
 
 fn query_links(conn: &Connection) -> Result<Vec<D3Link>> {
-    let mut stmt = conn.prepare(
-        "SELECT source_id, target_id, rel_type, weight FROM kg_relations ORDER BY id",
-    )?;
+    let mut stmt = conn
+        .prepare("SELECT source_id, target_id, rel_type, weight FROM kg_relations ORDER BY id")?;
 
     let rows = stmt.query_map([], |row| {
         let source: i64 = row.get(0)?;
@@ -192,8 +190,12 @@ mod tests {
     fn test_export_json_serialization() {
         let kg = setup();
 
-        let id1 = kg.insert_entity(&Entity::new("concept", "Neural Networks")).unwrap();
-        let id2 = kg.insert_entity(&Entity::new("concept", "Deep Learning")).unwrap();
+        let id1 = kg
+            .insert_entity(&Entity::new("concept", "Neural Networks"))
+            .unwrap();
+        let id2 = kg
+            .insert_entity(&Entity::new("concept", "Deep Learning"))
+            .unwrap();
         kg.insert_relation(&Relation::new(id1, id2, "related_to", 0.9).unwrap())
             .unwrap();
 
@@ -225,8 +227,10 @@ mod tests {
         let id2 = kg.insert_entity(&Entity::new("paper", "Paper X")).unwrap();
         let id3 = kg.insert_entity(&Entity::new("topic", "ML")).unwrap();
 
-        kg.insert_relation(&Relation::new(id1, id2, "wrote", 1.0).unwrap()).unwrap();
-        kg.insert_relation(&Relation::new(id2, id3, "covers", 0.7).unwrap()).unwrap();
+        kg.insert_relation(&Relation::new(id1, id2, "wrote", 1.0).unwrap())
+            .unwrap();
+        kg.insert_relation(&Relation::new(id2, id3, "covers", 0.7).unwrap())
+            .unwrap();
 
         let result = export_d3_json(kg.connection()).unwrap();
 
