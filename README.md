@@ -322,6 +322,39 @@ CREATE TABLE kg_vectors (
 );
 ```
 
+### kg_hyperedges
+
+```sql
+CREATE TABLE kg_hyperedges (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    hyperedge_type TEXT NOT NULL,
+    entity_ids TEXT NOT NULL,  -- JSON array of entity IDs
+    weight REAL DEFAULT 1.0,
+    arity INTEGER NOT NULL,    -- Number of entities in hyperedge
+    properties TEXT,  -- JSON
+    created_at INTEGER,
+    updated_at INTEGER
+);
+
+CREATE INDEX idx_hyperedges_type ON kg_hyperedges(hyperedge_type);
+CREATE INDEX idx_hyperedges_arity ON kg_hyperedges(arity);
+```
+
+### kg_hyperedge_entities
+
+```sql
+CREATE TABLE kg_hyperedge_entities (
+    hyperedge_id INTEGER NOT NULL,
+    entity_id INTEGER NOT NULL,
+    position INTEGER NOT NULL,  -- Position in hyperedge
+    PRIMARY KEY (hyperedge_id, entity_id),
+    FOREIGN KEY (hyperedge_id) REFERENCES kg_hyperedges(id) ON DELETE CASCADE,
+    FOREIGN KEY (entity_id) REFERENCES kg_entities(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_hyperedge_entities_entity ON kg_hyperedge_entities(entity_id);
+```
+
 ## Performance
 
 Benchmarks on a knowledge graph with 2,619 entities and 1.48M relations:
@@ -353,7 +386,7 @@ Benchmarks on a knowledge graph with 2,619 entities and 1.48M relations:
 | GitHub Actions CI | ✅ Complete |
 | More Extension Functions | ✅ Complete (v0.7.0) |
 | **Vector Indexing (TurboQuant)** | ✅ **Complete (v0.8.0)** |
-| Higher-order Relations | ⏳ Planned |
+| **Higher-order Relations (Hyperedge)** | ✅ **Complete (v0.9.0)** |
 | Graph Visualization Export | ⏳ Planned |
 | Async API | ⏳ Planned |
 
