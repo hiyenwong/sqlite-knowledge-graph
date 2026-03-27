@@ -81,6 +81,56 @@ pub fn create_schema(conn: &Connection) -> Result<()> {
         [],
     )?;
 
+    // Create hyperedges table (higher-order relations)
+    tx.execute(
+        r#"
+        CREATE TABLE IF NOT EXISTS kg_hyperedges (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            hyperedge_type TEXT NOT NULL,
+            entity_ids TEXT NOT NULL,
+            weight REAL DEFAULT 1.0,
+            arity INTEGER NOT NULL,
+            properties TEXT,
+            created_at INTEGER DEFAULT (strftime('%s', 'now')),
+            updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+        )
+        "#,
+        [],
+    )?;
+
+    // Create hyperedge-entity association table
+    tx.execute(
+        r#"
+        CREATE TABLE IF NOT EXISTS kg_hyperedge_entities (
+            hyperedge_id INTEGER NOT NULL,
+            entity_id INTEGER NOT NULL,
+            position INTEGER NOT NULL,
+            PRIMARY KEY (hyperedge_id, entity_id),
+            FOREIGN KEY (hyperedge_id) REFERENCES kg_hyperedges(id) ON DELETE CASCADE,
+            FOREIGN KEY (entity_id) REFERENCES kg_entities(id) ON DELETE CASCADE
+        )
+        "#,
+        [],
+    )?;
+
+    // Hyperedge indexes
+    tx.execute(
+        "CREATE INDEX IF NOT EXISTS idx_hyperedges_type ON kg_hyperedges(hyperedge_type)",
+        [],
+    )?;
+    tx.execute(
+        "CREATE INDEX IF NOT EXISTS idx_hyperedges_arity ON kg_hyperedges(arity)",
+        [],
+    )?;
+    tx.execute(
+        "CREATE INDEX IF NOT EXISTS idx_he_entities_entity ON kg_hyperedge_entities(entity_id)",
+        [],
+    )?;
+    tx.execute(
+        "CREATE INDEX IF NOT EXISTS idx_he_entities_hyperedge ON kg_hyperedge_entities(hyperedge_id)",
+        [],
+    )?;
+
     tx.commit()?;
     Ok(())
 }

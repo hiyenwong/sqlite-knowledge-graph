@@ -40,6 +40,7 @@ pub use extension::sqlite3_sqlite_knowledge_graph_init;
 pub use functions::register_functions;
 pub use graph::{Direction, GraphStats, PathStep, TraversalNode, TraversalPath, TraversalQuery};
 pub use graph::{Entity, Neighbor, Relation};
+pub use graph::{HigherOrderNeighbor, HigherOrderPath, HigherOrderPathStep, Hyperedge};
 pub use migrate::{
     build_relationships, migrate_all, migrate_papers, migrate_skills, MigrationStats,
 };
@@ -280,6 +281,94 @@ impl KnowledgeGraph {
         }
 
         Ok(vectors)
+    }
+
+    // ========== Higher-Order Relations (Hyperedges) ==========
+
+    /// Insert a hyperedge (higher-order relation) into the knowledge graph.
+    pub fn insert_hyperedge(&self, hyperedge: &Hyperedge) -> Result<i64> {
+        graph::insert_hyperedge(&self.conn, hyperedge)
+    }
+
+    /// Get a hyperedge by ID.
+    pub fn get_hyperedge(&self, id: i64) -> Result<Hyperedge> {
+        graph::get_hyperedge(&self.conn, id)
+    }
+
+    /// List hyperedges with optional filtering.
+    pub fn list_hyperedges(
+        &self,
+        hyperedge_type: Option<&str>,
+        min_arity: Option<usize>,
+        max_arity: Option<usize>,
+        limit: Option<i64>,
+    ) -> Result<Vec<Hyperedge>> {
+        graph::list_hyperedges(&self.conn, hyperedge_type, min_arity, max_arity, limit)
+    }
+
+    /// Update a hyperedge.
+    pub fn update_hyperedge(&self, hyperedge: &Hyperedge) -> Result<()> {
+        graph::update_hyperedge(&self.conn, hyperedge)
+    }
+
+    /// Delete a hyperedge by ID.
+    pub fn delete_hyperedge(&self, id: i64) -> Result<()> {
+        graph::delete_hyperedge(&self.conn, id)
+    }
+
+    /// Get higher-order neighbors of an entity (connected through hyperedges).
+    pub fn get_higher_order_neighbors(
+        &self,
+        entity_id: i64,
+        min_arity: Option<usize>,
+        max_arity: Option<usize>,
+    ) -> Result<Vec<HigherOrderNeighbor>> {
+        graph::get_higher_order_neighbors(&self.conn, entity_id, min_arity, max_arity)
+    }
+
+    /// Get all hyperedges that an entity participates in.
+    pub fn get_entity_hyperedges(&self, entity_id: i64) -> Result<Vec<Hyperedge>> {
+        graph::get_entity_hyperedges(&self.conn, entity_id)
+    }
+
+    /// Higher-order BFS traversal through hyperedges.
+    pub fn kg_higher_order_bfs(
+        &self,
+        start_id: i64,
+        max_depth: u32,
+        min_arity: Option<usize>,
+    ) -> Result<Vec<TraversalNode>> {
+        graph::higher_order_bfs(&self.conn, start_id, max_depth, min_arity)
+    }
+
+    /// Find shortest path between two entities through hyperedges.
+    pub fn kg_higher_order_shortest_path(
+        &self,
+        from_id: i64,
+        to_id: i64,
+        max_depth: u32,
+    ) -> Result<Option<HigherOrderPath>> {
+        graph::higher_order_shortest_path(&self.conn, from_id, to_id, max_depth)
+    }
+
+    /// Compute hyperedge degree centrality for an entity.
+    pub fn kg_hyperedge_degree(&self, entity_id: i64) -> Result<f64> {
+        graph::hyperedge_degree(&self.conn, entity_id)
+    }
+
+    /// Compute entity-level hypergraph PageRank using Zhou formula.
+    pub fn kg_hypergraph_entity_pagerank(
+        &self,
+        damping: Option<f64>,
+        max_iter: Option<usize>,
+        tolerance: Option<f64>,
+    ) -> Result<std::collections::HashMap<i64, f64>> {
+        graph::hypergraph_entity_pagerank(
+            &self.conn,
+            damping.unwrap_or(0.85),
+            max_iter.unwrap_or(100),
+            tolerance.unwrap_or(1e-6),
+        )
     }
 
     // ========== RAG Query Functions ==========

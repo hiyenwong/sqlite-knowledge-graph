@@ -30,6 +30,12 @@ pub enum Error {
     #[error("Invalid weight: {0}")]
     InvalidWeight(f64),
 
+    #[error("Invalid arity: {0} (minimum 2 entities required)")]
+    InvalidArity(usize),
+
+    #[error("Hyperedge not found: {0}")]
+    HyperedgeNotFound(i64),
+
     #[error("Invalid entity type: {0}")]
     InvalidEntityType(String),
 
