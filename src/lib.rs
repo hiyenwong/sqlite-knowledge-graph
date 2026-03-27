@@ -20,6 +20,7 @@
 pub mod algorithms;
 pub mod embed;
 pub mod error;
+pub mod export;
 pub mod extension;
 pub mod functions;
 pub mod graph;
@@ -31,6 +32,7 @@ pub use algorithms::{
     analyze_graph, connected_components, louvain_communities, pagerank, CommunityResult,
     PageRankConfig,
 };
+pub use export::{D3ExportGraph, D3ExportMetadata, D3Link, D3Node};
 pub use embed::{
     check_dependencies, get_entities_needing_embedding, EmbeddingConfig, EmbeddingGenerator,
     EmbeddingStats,
@@ -504,6 +506,23 @@ impl KnowledgeGraph {
     /// Run full graph analysis (PageRank + Louvain + Connected Components).
     pub fn kg_analyze(&self) -> Result<algorithms::GraphAnalysis> {
         algorithms::analyze_graph(&self.conn)
+    }
+
+    // ========== Visualization Export ==========
+
+    /// Export the knowledge graph in D3.js JSON format.
+    ///
+    /// Returns a `D3ExportGraph` containing nodes, links, and metadata,
+    /// ready for use with D3.js force-directed graph visualizations.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let graph = kg.export_json()?;
+    /// let json = serde_json::to_string_pretty(&graph)?;
+    /// std::fs::write("graph.json", json)?;
+    /// ```
+    pub fn export_json(&self) -> Result<D3ExportGraph> {
+        export::export_d3_json(&self.conn)
     }
 }
 
