@@ -37,7 +37,7 @@ pub use embed::{
     EmbeddingStats,
 };
 pub use error::{Error, Result};
-pub use export::{D3ExportGraph, D3ExportMetadata, D3Link, D3Node};
+pub use export::{D3ExportGraph, D3ExportMetadata, D3Link, D3Node, DotConfig};
 pub use extension::sqlite3_sqlite_knowledge_graph_init;
 pub use functions::register_functions;
 pub use graph::{Direction, GraphStats, PathStep, TraversalNode, TraversalPath, TraversalQuery};
@@ -523,6 +523,21 @@ impl KnowledgeGraph {
     /// ```
     pub fn export_json(&self) -> Result<D3ExportGraph> {
         export::export_d3_json(&self.conn)
+    }
+
+    /// Export the knowledge graph in DOT (Graphviz) format.
+    ///
+    /// Returns a DOT format string that can be rendered with Graphviz tools
+    /// (`dot`, `neato`, `fdp`, etc.).
+    ///
+    /// # Example
+    /// ```ignore
+    /// let dot = kg.export_dot(&DotConfig::default())?;
+    /// std::fs::write("graph.dot", dot)?;
+    /// // Then: dot -Tpng graph.dot -o graph.png
+    /// ```
+    pub fn export_dot(&self, config: &DotConfig) -> Result<String> {
+        export::export_dot(&self.conn, config)
     }
 }
 
