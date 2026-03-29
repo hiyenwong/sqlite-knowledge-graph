@@ -175,9 +175,7 @@ impl TurboQuantIndex {
     /// paper's requirement of a proper random orthogonal matrix.
     fn generate_rotation_matrix(d: usize, rng: &mut StdRng) -> Vec<Vec<f32>> {
         // Sample entries from N(0,1) as f64 for nalgebra
-        let data: Vec<f64> = (0..d * d)
-            .map(|_| StandardNormal.sample(rng))
-            .collect();
+        let data: Vec<f64> = (0..d * d).map(|_| StandardNormal.sample(rng)).collect();
         let matrix = DMatrix::from_vec(d, d, data);
 
         // QR decomposition; Q is d×d orthogonal
@@ -197,7 +195,7 @@ impl TurboQuantIndex {
     /// Lloyd's 1-D k-means to find the centroids that minimise MSE.
     fn compute_codebook(bit_width: usize) -> Vec<f32> {
         let k = 1usize << bit_width; // 2^b centroids
-        // Use a fixed-seed RNG so the codebook is deterministic
+                                     // Use a fixed-seed RNG so the codebook is deterministic
         let mut rng = StdRng::seed_from_u64(0xc0de_b007);
         let num_samples = 50_000usize;
         let std_dev = (1.0_f32 / 384_f32).sqrt(); // approximate for default dim

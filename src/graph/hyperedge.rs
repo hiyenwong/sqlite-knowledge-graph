@@ -473,10 +473,7 @@ pub fn higher_order_bfs(
         let neighbors = get_higher_order_neighbors(conn, current_id, min_arity, None)?;
 
         for neighbor in neighbors {
-            let neighbor_id = neighbor
-                .entity
-                .id
-                .ok_or(Error::EntityNotFound(0))?;
+            let neighbor_id = neighbor.entity.id.ok_or(Error::EntityNotFound(0))?;
             if !visited.contains(&neighbor_id) {
                 visited.insert(neighbor_id);
                 queue.push_back((neighbor_id, depth + 1));
@@ -532,10 +529,7 @@ pub fn higher_order_shortest_path(
         let neighbors = get_higher_order_neighbors(conn, current_id, None, None)?;
 
         for neighbor in neighbors {
-            let neighbor_id = neighbor
-                .entity
-                .id
-                .ok_or(Error::EntityNotFound(0))?;
+            let neighbor_id = neighbor.entity.id.ok_or(Error::EntityNotFound(0))?;
             if !visited.contains(&neighbor_id) {
                 visited.insert(neighbor_id);
                 parent.insert(neighbor_id, (current_id, neighbor.hyperedge));
