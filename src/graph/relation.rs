@@ -105,7 +105,6 @@ pub fn get_neighbors(
     let mut result = Vec::new();
     let mut visited = std::collections::HashSet::new();
     let mut queue = VecDeque::new();
-    let mut level_queue = VecDeque::new();
 
     // Start with direct neighbors
     visited.insert(entity_id);
@@ -117,7 +116,6 @@ pub fn get_neighbors(
         if !visited.contains(&neighbor_id) {
             visited.insert(neighbor_id);
             queue.push_back((neighbor_id, 1));
-            level_queue.push_back((neighbor_entity.clone(), relation.clone()));
             result.push(Neighbor {
                 entity: neighbor_entity,
                 relation,
@@ -139,7 +137,6 @@ pub fn get_neighbors(
             if !visited.contains(&neighbor_id) {
                 visited.insert(neighbor_id);
                 queue.push_back((neighbor_id, current_depth + 1));
-                level_queue.push_back((neighbor_entity.clone(), relation.clone()));
                 result.push(Neighbor {
                     entity: neighbor_entity,
                     relation,

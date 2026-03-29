@@ -9,7 +9,9 @@
 //! - No training required (data-oblivious)
 
 use crate::error::{Error, Result};
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use nalgebra::DMatrix;
+use rand::{rngs::StdRng, SeedableRng};
+use rand_distr::{Distribution, StandardNormal};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -166,64 +168,99 @@ impl TurboQuantIndex {
         })
     }
 
-    /// Generate random rotation matrix
+    /// Generate random orthogonal rotation matrix via QR decomposition.
+    ///
+    /// Fills a d×d matrix with standard-normal entries, then performs QR
+    /// decomposition and returns the orthogonal factor Q.  This matches the
+    /// paper's requirement of a proper random orthogonal matrix.
     fn generate_rotation_matrix(d: usize, rng: &mut StdRng) -> Vec<Vec<f32>> {
-        // Use random orthogonal matrix (Gram-Schmidt on random matrix)
-        // Simplified: use random normal matrix
-        let mut matrix = vec![vec![0.0f32; d]; d];
+        // Sample entries from N(0,1) as f64 for nalgebra
+        let data: Vec<f64> = (0..d * d)
+            .map(|_| StandardNormal.sample(rng))
+            .collect();
+        let matrix = DMatrix::from_vec(d, d, data);
 
-        for row in &mut matrix {
-            for val in row.iter_mut() {
-                *val = rng.gen::<f32>() * 2.0 - 1.0;
-            }
-        }
+        // QR decomposition; Q is d×d orthogonal
+        let qr = matrix.qr();
+        let q = qr.q();
 
-        // Note: Full QR decomposition would be better but requires more deps
-        // This approximation works well in practice for high dimensions
-        matrix
+        // Convert to Vec<Vec<f32>>
+        (0..d)
+            .map(|i| (0..d).map(|j| q[(i, j)] as f32).collect())
+            .collect()
     }
 
-    /// Compute optimal codebook for given bit width
-    /// Based on concentrated Beta distribution after random rotation
+    /// Compute optimal scalar quantizer codebook using the Max-Lloyd algorithm.
+    ///
+    /// After random rotation each coordinate follows an approximately
+    /// N(0, 1/d) distribution.  We sample from that distribution and run
+    /// Lloyd's 1-D k-means to find the centroids that minimise MSE.
     fn compute_codebook(bit_width: usize) -> Vec<f32> {
-        let num_levels = 1 << bit_width; // 2^b
+        let k = 1usize << bit_width; // 2^b centroids
+        // Use a fixed-seed RNG so the codebook is deterministic
+        let mut rng = StdRng::seed_from_u64(0xc0de_b007);
+        let num_samples = 50_000usize;
+        let std_dev = (1.0_f32 / 384_f32).sqrt(); // approximate for default dim
 
-        // For concentrated Beta distribution (after rotation),
-        // values are concentrated around origin
-        // Use non-uniform quantization optimized for this distribution
+        // 1. Draw samples approximating the post-rotation distribution
+        let samples: Vec<f32> = (0..num_samples)
+            .map(|_| {
+                let n: f64 = StandardNormal.sample(&mut rng);
+                (n as f32 * std_dev).clamp(-1.0, 1.0)
+            })
+            .collect();
 
-        let mut codebook = Vec::with_capacity(num_levels);
+        // 2. Initialise centroids uniformly across [-1, 1]
+        let mut centroids: Vec<f32> = (0..k)
+            .map(|i| {
+                if k == 1 {
+                    0.0
+                } else {
+                    -1.0 + 2.0 * i as f32 / (k - 1) as f32
+                }
+            })
+            .collect();
 
-        match bit_width {
-            1 => {
-                // 1-bit: just sign
-                codebook = vec![-0.5, 0.5];
+        // 3. Lloyd iterations (1-D k-means)
+        for _ in 0..100 {
+            let mut sums = vec![0.0f64; k];
+            let mut counts = vec![0usize; k];
+
+            for &x in &samples {
+                let nearest = centroids
+                    .iter()
+                    .enumerate()
+                    .min_by(|(_, a), (_, b)| {
+                        (x - *a)
+                            .abs()
+                            .partial_cmp(&(x - *b).abs())
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    })
+                    .map(|(i, _)| i)
+                    .unwrap_or(0);
+                sums[nearest] += x as f64;
+                counts[nearest] += 1;
             }
-            2 => {
-                // 2-bit: 4 levels
-                codebook = vec![-0.75, -0.25, 0.25, 0.75];
-            }
-            3 => {
-                // 3-bit: 8 levels (optimal for Beta concentration)
-                codebook = vec![-0.9, -0.6, -0.35, -0.1, 0.1, 0.35, 0.6, 0.9];
-            }
-            4 => {
-                // 4-bit: 16 levels
-                for i in 0..num_levels {
-                    let val = (i as f32 / (num_levels - 1) as f32) * 2.0 - 1.0;
-                    codebook.push(val * 0.95); // Slight margin
+
+            let prev = centroids.clone();
+            for i in 0..k {
+                if counts[i] > 0 {
+                    centroids[i] = (sums[i] / counts[i] as f64) as f32;
                 }
             }
-            _ => {
-                // General case: uniform quantization
-                for i in 0..num_levels {
-                    let val = (i as f32 / (num_levels - 1) as f32) * 2.0 - 1.0;
-                    codebook.push(val * 0.95);
-                }
+
+            // Check convergence
+            let converged = centroids
+                .iter()
+                .zip(prev.iter())
+                .all(|(a, b)| (a - b).abs() < 1e-6);
+            if converged {
+                break;
             }
         }
 
-        codebook
+        centroids.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        centroids
     }
 
     /// Add a vector to the index
@@ -335,29 +372,39 @@ impl TurboQuantIndex {
         Ok(results)
     }
 
-    /// Compute approximate cosine similarity between quantized vectors
+    /// Compute approximate cosine similarity between quantized vectors.
+    ///
+    /// All arithmetic is done in the quantised reconstruction space so that
+    /// numerator and denominator are dimensionally consistent (both are sums
+    /// of squared codebook values).  The original-space norms are no longer
+    /// used here; they are kept in `vector_norms` only for potential future
+    /// re-ranking passes.
     fn compute_similarity(
         &self,
         query: &[u8],
         target: &[u8],
-        query_norm: f32,
-        target_norm: f32,
+        _query_norm: f32,
+        _target_norm: f32,
     ) -> f32 {
         if query.len() != target.len() {
             return 0.0;
         }
 
-        // Approximate dot product using dequantized values
         let mut dot_product = 0.0f32;
+        let mut query_sq = 0.0f32;
+        let mut target_sq = 0.0f32;
+
         for i in 0..query.len() {
             let q_val = self.codebook[query[i] as usize];
             let t_val = self.codebook[target[i] as usize];
             dot_product += q_val * t_val;
+            query_sq += q_val * q_val;
+            target_sq += t_val * t_val;
         }
 
-        // Normalize
-        if query_norm > 0.0 && target_norm > 0.0 {
-            dot_product / (query_norm * target_norm)
+        let denom = query_sq.sqrt() * target_sq.sqrt();
+        if denom > 0.0 {
+            dot_product / denom
         } else {
             0.0
         }

@@ -162,7 +162,7 @@ pub fn update_entity(conn: &rusqlite::Connection, entity: &Entity) -> Result<()>
         .unwrap()
         .as_secs() as i64;
 
-    conn.execute(
+    let affected = conn.execute(
         r#"
         UPDATE kg_entities
         SET entity_type = ?1, name = ?2, properties = ?3, updated_at = ?4
@@ -176,6 +176,10 @@ pub fn update_entity(conn: &rusqlite::Connection, entity: &Entity) -> Result<()>
             id
         ],
     )?;
+
+    if affected == 0 {
+        return Err(Error::EntityNotFound(id));
+    }
 
     Ok(())
 }

@@ -64,10 +64,7 @@ impl VectorStore {
         let tx = conn.unchecked_transaction()?;
 
         for (entity_id, vector) in vectors {
-            // Validate entity exists
-            crate::graph::entity::get_entity(conn, entity_id)?;
-
-            // Serialize vector to bytes
+            // Serialize vector to bytes (FK constraint enforces entity existence)
             let mut bytes = Vec::with_capacity(vector.len() * 4);
             for &val in &vector {
                 bytes.extend_from_slice(&val.to_le_bytes());
@@ -140,9 +137,8 @@ impl VectorStore {
         let mut stmt =
             conn.prepare("SELECT vector, dimension FROM kg_vectors WHERE entity_id = ?1")?;
 
-        let vector_blob: Vec<u8> = stmt.query_row(params![entity_id], |row| row.get(0))?;
-
-        let dimension: i64 = stmt.query_row(params![entity_id], |row| row.get(1))?;
+        let (vector_blob, dimension): (Vec<u8>, i64) =
+            stmt.query_row(params![entity_id], |row| Ok((row.get(0)?, row.get(1)?)))?;
 
         // Deserialize vector
         let mut vector = Vec::with_capacity(dimension as usize);

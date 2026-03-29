@@ -14,7 +14,12 @@ pub struct CommunityResult {
     pub modularity: f64,
 }
 
-/// Compute communities using Louvain algorithm
+/// Compute communities using a simplified single-phase Louvain algorithm.
+///
+/// This implements Phase 1 of the Louvain method (local node moves) only.
+/// Phase 2 (community aggregation into super-nodes) is not implemented.
+/// For graphs with deep hierarchical community structure, results may be
+/// sub-optimal compared to the full two-phase algorithm.
 ///
 /// Returns community memberships and modularity score.
 pub fn louvain_communities(conn: &Connection) -> Result<CommunityResult> {
@@ -22,7 +27,7 @@ pub fn louvain_communities(conn: &Connection) -> Result<CommunityResult> {
     let mut graph: HashMap<i64, HashMap<i64, f64>> = HashMap::new();
     let mut total_weight = 0.0;
 
-    let mut stmt = conn.prepare("SELECT from_id, to_id, weight FROM relations")?;
+    let mut stmt = conn.prepare("SELECT source_id, target_id, weight FROM kg_relations")?;
 
     let rows = stmt.query_map([], |row| {
         Ok((
@@ -136,17 +141,39 @@ fn calculate_modularity_gain(
     community: &HashMap<i64, i32>,
     total_weight: f64,
 ) -> f64 {
-    let mut gain = 0.0;
-
-    if let Some(neighbors) = graph.get(&node) {
-        for (&neighbor, &weight) in neighbors {
-            if community.get(&neighbor) == Some(&target_community) {
-                gain += weight / total_weight;
-            }
-        }
+    if total_weight == 0.0 {
+        return 0.0;
     }
 
-    gain
+    let m = total_weight;
+
+    // k_i: degree (sum of weights) of the node being moved
+    let k_i: f64 = graph
+        .get(&node)
+        .map(|edges| edges.values().sum())
+        .unwrap_or(0.0);
+
+    // k_i_in: sum of weights from node to nodes already in target_community
+    let k_i_in: f64 = graph
+        .get(&node)
+        .map(|edges| {
+            edges
+                .iter()
+                .filter(|(&nbr, _)| community.get(&nbr) == Some(&target_community))
+                .map(|(_, &w)| w)
+                .sum()
+        })
+        .unwrap_or(0.0);
+
+    // k_tot: sum of degrees of all nodes in target_community
+    let k_tot: f64 = graph
+        .iter()
+        .filter(|(&id, _)| id != node && community.get(&id) == Some(&target_community))
+        .map(|(_, edges)| edges.values().sum::<f64>())
+        .sum();
+
+    // Standard Louvain ΔQ = k_i_in / m  -  k_tot * k_i / (2 * m²)
+    k_i_in / m - k_tot * k_i / (2.0 * m * m)
 }
 
 fn calculate_modularity(
@@ -177,22 +204,22 @@ mod tests {
 
     fn setup_test_db() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE entities (id INTEGER PRIMARY KEY);
-             CREATE TABLE relations (id INTEGER PRIMARY KEY, from_id INTEGER, to_id INTEGER, relation_type TEXT, weight REAL);"
-        ).unwrap();
+        crate::schema::create_schema(&conn).unwrap();
 
         // Create two communities: 1-2-3 and 4-5-6, with weak link between
-        conn.execute(
-            "INSERT INTO entities (id) VALUES (1), (2), (3), (4), (5), (6)",
-            [],
-        )
-        .unwrap();
-        conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (1, 2, 'link', 1.0)", []).unwrap();
-        conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (2, 3, 'link', 1.0)", []).unwrap();
-        conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (4, 5, 'link', 1.0)", []).unwrap();
-        conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (5, 6, 'link', 1.0)", []).unwrap();
-        conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (3, 4, 'link', 0.1)", []).unwrap();
+        use crate::graph::entity::{insert_entity, Entity};
+        use crate::graph::relation::{insert_relation, Relation};
+        let id1 = insert_entity(&conn, &Entity::new("node", "Node 1")).unwrap();
+        let id2 = insert_entity(&conn, &Entity::new("node", "Node 2")).unwrap();
+        let id3 = insert_entity(&conn, &Entity::new("node", "Node 3")).unwrap();
+        let id4 = insert_entity(&conn, &Entity::new("node", "Node 4")).unwrap();
+        let id5 = insert_entity(&conn, &Entity::new("node", "Node 5")).unwrap();
+        let id6 = insert_entity(&conn, &Entity::new("node", "Node 6")).unwrap();
+        insert_relation(&conn, &Relation::new(id1, id2, "link", 1.0).unwrap()).unwrap();
+        insert_relation(&conn, &Relation::new(id2, id3, "link", 1.0).unwrap()).unwrap();
+        insert_relation(&conn, &Relation::new(id4, id5, "link", 1.0).unwrap()).unwrap();
+        insert_relation(&conn, &Relation::new(id5, id6, "link", 1.0).unwrap()).unwrap();
+        insert_relation(&conn, &Relation::new(id3, id4, "link", 0.1).unwrap()).unwrap();
 
         conn
     }
@@ -209,7 +236,7 @@ mod tests {
     #[test]
     fn test_empty_graph() {
         let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch("CREATE TABLE entities (id INTEGER PRIMARY KEY); CREATE TABLE relations (id INTEGER PRIMARY KEY, from_id INTEGER, to_id INTEGER, relation_type TEXT, weight REAL);").unwrap();
+        crate::schema::create_schema(&conn).unwrap();
 
         let result = louvain_communities(&conn).unwrap();
         assert_eq!(result.num_communities, 0);

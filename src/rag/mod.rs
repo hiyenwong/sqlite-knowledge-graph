@@ -47,6 +47,6 @@ impl RagEngine {
         // 2. Expand with graph neighbors
         // 3. Combine scores
         // 4. Rank and return top k
-        vec![]
+        todo!("RAG hybrid search not yet implemented")
     }
 }

@@ -13,7 +13,7 @@ pub fn connected_components(conn: &Connection) -> Result<Vec<Vec<i64>>> {
     let mut graph: HashMap<i64, Vec<i64>> = HashMap::new();
     let mut all_nodes: HashSet<i64> = HashSet::new();
 
-    let mut stmt = conn.prepare("SELECT from_id, to_id FROM relations")?;
+    let mut stmt = conn.prepare("SELECT source_id, target_id FROM kg_relations")?;
 
     let rows = stmt.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)))?;
 
@@ -26,7 +26,7 @@ pub fn connected_components(conn: &Connection) -> Result<Vec<Vec<i64>>> {
     }
 
     // Add isolated nodes
-    let mut stmt = conn.prepare("SELECT id FROM entities")?;
+    let mut stmt = conn.prepare("SELECT id FROM kg_entities")?;
     let entity_rows = stmt.query_map([], |row| row.get::<_, i64>(0))?;
     for row in entity_rows {
         let id = row?;
@@ -78,7 +78,7 @@ pub fn strongly_connected_components(conn: &Connection) -> Result<Vec<Vec<i64>>>
     let mut reverse_graph: HashMap<i64, Vec<i64>> = HashMap::new();
     let mut all_nodes: HashSet<i64> = HashSet::new();
 
-    let mut stmt = conn.prepare("SELECT from_id, to_id FROM relations")?;
+    let mut stmt = conn.prepare("SELECT source_id, target_id FROM kg_relations")?;
     let rows = stmt.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)))?;
 
     for row in rows {
@@ -91,60 +91,57 @@ pub fn strongly_connected_components(conn: &Connection) -> Result<Vec<Vec<i64>>>
         reverse_graph.entry(from).or_default();
     }
 
-    // First pass: order by finish time
+    // First pass: compute finish order iteratively (avoids stack overflow on large chains)
     let mut visited = HashSet::new();
     let mut finish_order = Vec::new();
 
-    fn dfs1(
-        node: i64,
-        graph: &HashMap<i64, Vec<i64>>,
-        visited: &mut HashSet<i64>,
-        finish_order: &mut Vec<i64>,
-    ) {
-        visited.insert(node);
-        if let Some(neighbors) = graph.get(&node) {
-            for &neighbor in neighbors {
+    for &start in &all_nodes {
+        if visited.contains(&start) {
+            continue;
+        }
+        // Iterative DFS with explicit stack; each entry is (node, iterator_index)
+        let mut stack: Vec<(i64, usize)> = vec![(start, 0)];
+        visited.insert(start);
+        while let Some((node, idx)) = stack.last_mut() {
+            let node = *node;
+            let neighbors = graph.get(&node).map(|v| v.as_slice()).unwrap_or(&[]);
+            if *idx < neighbors.len() {
+                let neighbor = neighbors[*idx];
+                *idx += 1;
                 if !visited.contains(&neighbor) {
-                    dfs1(neighbor, graph, visited, finish_order);
+                    visited.insert(neighbor);
+                    stack.push((neighbor, 0));
                 }
+            } else {
+                finish_order.push(node);
+                stack.pop();
             }
         }
-        finish_order.push(node);
     }
 
-    for &node in &all_nodes {
-        if !visited.contains(&node) {
-            dfs1(node, &graph, &mut visited, &mut finish_order);
-        }
-    }
-
-    // Second pass: collect SCCs
+    // Second pass: collect SCCs iteratively (reverse graph BFS/DFS)
     let mut visited = HashSet::new();
     let mut components = Vec::new();
 
-    fn dfs2(
-        node: i64,
-        reverse_graph: &HashMap<i64, Vec<i64>>,
-        visited: &mut HashSet<i64>,
-        component: &mut Vec<i64>,
-    ) {
-        visited.insert(node);
-        component.push(node);
-        if let Some(neighbors) = reverse_graph.get(&node) {
-            for &neighbor in neighbors {
-                if !visited.contains(&neighbor) {
-                    dfs2(neighbor, reverse_graph, visited, component);
+    for &start in finish_order.iter().rev() {
+        if visited.contains(&start) {
+            continue;
+        }
+        let mut component = Vec::new();
+        let mut stack = vec![start];
+        visited.insert(start);
+        while let Some(node) = stack.pop() {
+            component.push(node);
+            if let Some(neighbors) = reverse_graph.get(&node) {
+                for &neighbor in neighbors {
+                    if !visited.contains(&neighbor) {
+                        visited.insert(neighbor);
+                        stack.push(neighbor);
+                    }
                 }
             }
         }
-    }
-
-    for &node in finish_order.iter().rev() {
-        if !visited.contains(&node) {
-            let mut component = Vec::new();
-            dfs2(node, &reverse_graph, &mut visited, &mut component);
-            components.push(component);
-        }
+        components.push(component);
     }
 
     // Sort by size descending
@@ -159,20 +156,19 @@ mod tests {
 
     fn setup_test_db() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE entities (id INTEGER PRIMARY KEY);
-             CREATE TABLE relations (id INTEGER PRIMARY KEY, from_id INTEGER, to_id INTEGER, relation_type TEXT, weight REAL);"
-        ).unwrap();
+        crate::schema::create_schema(&conn).unwrap();
 
         // Create two disconnected components: 1-2-3 and 4-5
-        conn.execute(
-            "INSERT INTO entities (id) VALUES (1), (2), (3), (4), (5)",
-            [],
-        )
-        .unwrap();
-        conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (1, 2, 'link', 1.0)", []).unwrap();
-        conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (2, 3, 'link', 1.0)", []).unwrap();
-        conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (4, 5, 'link', 1.0)", []).unwrap();
+        use crate::graph::entity::{insert_entity, Entity};
+        use crate::graph::relation::{insert_relation, Relation};
+        let id1 = insert_entity(&conn, &Entity::new("node", "Node 1")).unwrap();
+        let id2 = insert_entity(&conn, &Entity::new("node", "Node 2")).unwrap();
+        let id3 = insert_entity(&conn, &Entity::new("node", "Node 3")).unwrap();
+        let id4 = insert_entity(&conn, &Entity::new("node", "Node 4")).unwrap();
+        let id5 = insert_entity(&conn, &Entity::new("node", "Node 5")).unwrap();
+        insert_relation(&conn, &Relation::new(id1, id2, "link", 1.0).unwrap()).unwrap();
+        insert_relation(&conn, &Relation::new(id2, id3, "link", 1.0).unwrap()).unwrap();
+        insert_relation(&conn, &Relation::new(id4, id5, "link", 1.0).unwrap()).unwrap();
 
         conn
     }
@@ -190,17 +186,17 @@ mod tests {
     #[test]
     fn test_strongly_connected_components() {
         let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE entities (id INTEGER PRIMARY KEY);
-             CREATE TABLE relations (id INTEGER PRIMARY KEY, from_id INTEGER, to_id INTEGER, relation_type TEXT, weight REAL);"
-        ).unwrap();
+        crate::schema::create_schema(&conn).unwrap();
 
         // Create a cycle: 1 -> 2 -> 3 -> 1
-        conn.execute("INSERT INTO entities (id) VALUES (1), (2), (3)", [])
-            .unwrap();
-        conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (1, 2, 'link', 1.0)", []).unwrap();
-        conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (2, 3, 'link', 1.0)", []).unwrap();
-        conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (3, 1, 'link', 1.0)", []).unwrap();
+        use crate::graph::entity::{insert_entity, Entity};
+        use crate::graph::relation::{insert_relation, Relation};
+        let id1 = insert_entity(&conn, &Entity::new("node", "Node 1")).unwrap();
+        let id2 = insert_entity(&conn, &Entity::new("node", "Node 2")).unwrap();
+        let id3 = insert_entity(&conn, &Entity::new("node", "Node 3")).unwrap();
+        insert_relation(&conn, &Relation::new(id1, id2, "link", 1.0).unwrap()).unwrap();
+        insert_relation(&conn, &Relation::new(id2, id3, "link", 1.0).unwrap()).unwrap();
+        insert_relation(&conn, &Relation::new(id3, id1, "link", 1.0).unwrap()).unwrap();
 
         let components = strongly_connected_components(&conn).unwrap();
 

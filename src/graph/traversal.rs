@@ -83,7 +83,7 @@ pub fn bfs_traversal(
 
     // Get start entity type
     let start_type: String = conn.query_row(
-        "SELECT entity_type FROM entities WHERE id = ?1",
+        "SELECT entity_type FROM kg_entities WHERE id = ?1",
         [start_id],
         |row| row.get(0),
     )?;
@@ -133,7 +133,7 @@ pub fn dfs_traversal(
 
     // Get start entity type
     let start_type: String = conn.query_row(
-        "SELECT entity_type FROM entities WHERE id = ?1",
+        "SELECT entity_type FROM kg_entities WHERE id = ?1",
         [start_id],
         |row| row.get(0),
     )?;
@@ -211,14 +211,12 @@ pub fn find_shortest_path(
     }
 
     let mut visited = HashMap::new(); // entity_id -> (from_id, relation_type, weight)
-    let mut queue = VecDeque::new();
+    let mut queue: VecDeque<(i64, u32)> = VecDeque::new(); // (entity_id, depth)
 
-    queue.push_back(from_id);
+    queue.push_back((from_id, 0));
     visited.insert(from_id, None);
 
-    while let Some(current_id) = queue.pop_front() {
-        let current_depth = count_depth(&visited, current_id);
-
+    while let Some((current_id, current_depth)) = queue.pop_front() {
         if current_depth >= max_depth {
             continue;
         }
@@ -235,7 +233,7 @@ pub fn find_shortest_path(
                     return Ok(Some(reconstruct_path(from_id, to_id, &visited)?));
                 }
 
-                queue.push_back(target_id);
+                queue.push_back((target_id, current_depth + 1));
             }
         }
     }
@@ -246,16 +244,16 @@ pub fn find_shortest_path(
 /// Compute graph statistics
 pub fn compute_graph_stats(conn: &Connection) -> Result<GraphStats> {
     let total_entities: i64 =
-        conn.query_row("SELECT COUNT(*) FROM entities", [], |row| row.get(0))?;
+        conn.query_row("SELECT COUNT(*) FROM kg_entities", [], |row| row.get(0))?;
 
     let total_relations: i64 =
-        conn.query_row("SELECT COUNT(*) FROM relations", [], |row| row.get(0))?;
+        conn.query_row("SELECT COUNT(*) FROM kg_relations", [], |row| row.get(0))?;
 
     let max_degree: i64 = conn.query_row(
         "SELECT COALESCE(MAX(cnt), 0) FROM (
-            SELECT from_id as id, COUNT(*) as cnt FROM relations GROUP BY from_id
+            SELECT source_id as id, COUNT(*) as cnt FROM kg_relations GROUP BY source_id
             UNION ALL
-            SELECT to_id as id, COUNT(*) as cnt FROM relations GROUP BY to_id
+            SELECT target_id as id, COUNT(*) as cnt FROM kg_relations GROUP BY target_id
         )",
         [],
         |row| row.get(0),
@@ -294,23 +292,23 @@ fn get_neighbors(
 
     let sql = match query.direction {
         Direction::Outgoing => {
-            "SELECT r.to_id, e.entity_type FROM relations r
-             JOIN entities e ON r.to_id = e.id
-             WHERE r.from_id = ?1"
+            "SELECT r.target_id, e.entity_type FROM kg_relations r
+             JOIN kg_entities e ON r.target_id = e.id
+             WHERE r.source_id = ?1"
         }
         Direction::Incoming => {
-            "SELECT r.from_id, e.entity_type FROM relations r
-             JOIN entities e ON r.from_id = e.id
-             WHERE r.to_id = ?1"
+            "SELECT r.source_id, e.entity_type FROM kg_relations r
+             JOIN kg_entities e ON r.source_id = e.id
+             WHERE r.target_id = ?1"
         }
         Direction::Both => {
-            "SELECT r.to_id, e.entity_type FROM relations r
-             JOIN entities e ON r.to_id = e.id
-             WHERE r.from_id = ?1
+            "SELECT r.target_id, e.entity_type FROM kg_relations r
+             JOIN kg_entities e ON r.target_id = e.id
+             WHERE r.source_id = ?1
              UNION
-             SELECT r.from_id, e.entity_type FROM relations r
-             JOIN entities e ON r.from_id = e.id
-             WHERE r.to_id = ?1"
+             SELECT r.source_id, e.entity_type FROM kg_relations r
+             JOIN kg_entities e ON r.source_id = e.id
+             WHERE r.target_id = ?1"
         }
     };
 
@@ -332,7 +330,7 @@ fn get_outgoing_relations(conn: &Connection, entity_id: i64) -> Result<Vec<(i64,
     let mut relations = Vec::new();
 
     let mut stmt =
-        conn.prepare("SELECT to_id, relation_type, weight FROM relations WHERE from_id = ?1")?;
+        conn.prepare("SELECT target_id, rel_type, weight FROM kg_relations WHERE source_id = ?1")?;
 
     let rows = stmt.query_map([entity_id], |row| {
         Ok((
@@ -347,21 +345,6 @@ fn get_outgoing_relations(conn: &Connection, entity_id: i64) -> Result<Vec<(i64,
     }
 
     Ok(relations)
-}
-
-fn count_depth(visited: &HashMap<i64, Option<(i64, String, f64)>>, entity_id: i64) -> u32 {
-    let mut depth = 0u32;
-    let mut current = entity_id;
-
-    while let Some(Some((from_id, _, _))) = visited.get(&current) {
-        depth += 1;
-        current = *from_id;
-        if depth > 100 {
-            break;
-        }
-    }
-
-    depth
 }
 
 fn reconstruct_path(
@@ -405,52 +388,21 @@ mod tests {
 
     fn setup_test_db() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
+        crate::schema::create_schema(&conn).unwrap();
 
-        conn.execute_batch(
-            "CREATE TABLE entities (
-                id INTEGER PRIMARY KEY,
-                entity_type TEXT NOT NULL,
-                name TEXT,
-                metadata TEXT
-            );
-            CREATE TABLE relations (
-                id INTEGER PRIMARY KEY,
-                from_id INTEGER NOT NULL,
-                to_id INTEGER NOT NULL,
-                relation_type TEXT NOT NULL,
-                weight REAL DEFAULT 1.0,
-                confidence REAL DEFAULT 1.0
-            );
-            ",
-        )
-        .unwrap();
+        use crate::graph::entity::{insert_entity, Entity};
+        use crate::graph::relation::{insert_relation, Relation};
 
-        // Insert test entities
-        conn.execute(
-            "INSERT INTO entities (id, entity_type, name) VALUES (1, 'paper', 'A')",
-            [],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO entities (id, entity_type, name) VALUES (2, 'paper', 'B')",
-            [],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO entities (id, entity_type, name) VALUES (3, 'paper', 'C')",
-            [],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO entities (id, entity_type, name) VALUES (4, 'paper', 'D')",
-            [],
-        )
-        .unwrap();
+        // Insert test entities: A=1, B=2, C=3, D=4
+        let id_a = insert_entity(&conn, &Entity::new("paper", "A")).unwrap();
+        let id_b = insert_entity(&conn, &Entity::new("paper", "B")).unwrap();
+        let id_c = insert_entity(&conn, &Entity::new("paper", "C")).unwrap();
+        let id_d = insert_entity(&conn, &Entity::new("paper", "D")).unwrap();
 
         // Insert test relations: A -> B -> C, A -> D
-        conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (1, 2, 'cites', 1.0)", []).unwrap();
-        conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (2, 3, 'cites', 1.0)", []).unwrap();
-        conn.execute("INSERT INTO relations (from_id, to_id, relation_type, weight) VALUES (1, 4, 'cites', 0.5)", []).unwrap();
+        insert_relation(&conn, &Relation::new(id_a, id_b, "cites", 1.0).unwrap()).unwrap();
+        insert_relation(&conn, &Relation::new(id_b, id_c, "cites", 1.0).unwrap()).unwrap();
+        insert_relation(&conn, &Relation::new(id_a, id_d, "cites", 0.5).unwrap()).unwrap();
 
         conn
     }

@@ -473,7 +473,10 @@ pub fn higher_order_bfs(
         let neighbors = get_higher_order_neighbors(conn, current_id, min_arity, None)?;
 
         for neighbor in neighbors {
-            let neighbor_id = neighbor.entity.id.unwrap();
+            let neighbor_id = neighbor
+                .entity
+                .id
+                .ok_or(Error::EntityNotFound(0))?;
             if !visited.contains(&neighbor_id) {
                 visited.insert(neighbor_id);
                 queue.push_back((neighbor_id, depth + 1));
@@ -529,7 +532,10 @@ pub fn higher_order_shortest_path(
         let neighbors = get_higher_order_neighbors(conn, current_id, None, None)?;
 
         for neighbor in neighbors {
-            let neighbor_id = neighbor.entity.id.unwrap();
+            let neighbor_id = neighbor
+                .entity
+                .id
+                .ok_or(Error::EntityNotFound(0))?;
             if !visited.contains(&neighbor_id) {
                 visited.insert(neighbor_id);
                 parent.insert(neighbor_id, (current_id, neighbor.hyperedge));
@@ -555,14 +561,19 @@ fn reconstruct_path(
     let mut total_weight = 0.0;
 
     while current != from_id {
-        let (prev, hyperedge) = parent.get(&current).unwrap();
-        total_weight += hyperedge.weight;
-        steps.push(HigherOrderPathStep {
-            hyperedge: hyperedge.clone(),
-            from_entity: *prev,
-            to_entity: current,
-        });
-        current = *prev;
+        // parent was populated for every node we visited, so this entry
+        // is guaranteed to exist; using if-let avoids an unwrap panic.
+        if let Some((prev, hyperedge)) = parent.get(&current) {
+            total_weight += hyperedge.weight;
+            steps.push(HigherOrderPathStep {
+                hyperedge: hyperedge.clone(),
+                from_entity: *prev,
+                to_entity: current,
+            });
+            current = *prev;
+        } else {
+            break; // defensive: should never happen in a well-formed graph
+        }
     }
 
     steps.reverse();
