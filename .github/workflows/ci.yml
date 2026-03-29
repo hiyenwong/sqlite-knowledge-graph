@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches-ignore: []   # Run CI on all branches
   pull_request:
     branches: [ main ]
 
