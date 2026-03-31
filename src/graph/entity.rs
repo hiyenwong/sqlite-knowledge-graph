@@ -159,7 +159,7 @@ pub fn update_entity(conn: &rusqlite::Connection, entity: &Entity) -> Result<()>
 
     let updated_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .map_err(|_| Error::InvalidInput("system clock before UNIX epoch".to_string()))?
         .as_secs() as i64;
 
     let affected = conn.execute(
