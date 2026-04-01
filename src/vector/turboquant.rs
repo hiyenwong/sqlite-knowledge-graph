@@ -464,6 +464,16 @@ impl TurboQuantIndex {
         Ok(index)
     }
 
+    /// Serialize index to bytes (for SQLite BLOB storage).
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        Ok(serde_json::to_vec(self)?)
+    }
+
+    /// Deserialize index from bytes (from SQLite BLOB storage).
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        Ok(serde_json::from_slice(bytes)?)
+    }
+
     /// Get the config
     pub fn config(&self) -> &TurboQuantConfig {
         &self.config

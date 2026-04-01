@@ -178,28 +178,41 @@ impl RagEngine {
     // ─────────────────────────────────────────────────────────────────────────
 
     /// Stage 1: ANN via TurboQuant.  Returns (entity_id, approx_score) pairs.
+    ///
+    /// The TurboQuant index is persisted in `kg_turboquant_cache` and only
+    /// rebuilt when the number of vectors in `kg_vectors` has changed.
     fn stage1_ann(&self, conn: &Connection, query_vec: &[f32]) -> Result<Vec<(i64, f32)>> {
-        // Load all vectors and build a fresh in-memory TurboQuant index.
-        // For a persistent-index variant, callers can pre-build and pass it in.
-        let all_vectors = load_all_vectors(conn)?;
-        if all_vectors.is_empty() {
+        let vector_count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM kg_vectors", [], |r| r.get(0))?;
+
+        if vector_count == 0 {
             return Ok(Vec::new());
         }
 
-        let dim = all_vectors[0].1.len();
-        let config = TurboQuantConfig {
-            dimension: dim,
-            bit_width: 3,
-            seed: 42,
+        // Try to load a valid cached index first.
+        let cached = load_turboquant_cache(conn, vector_count)?;
+        let index = match cached {
+            Some(idx) => idx,
+            None => {
+                // Cache miss or stale — rebuild from kg_vectors.
+                let all_vectors = load_all_vectors(conn)?;
+                let dim = all_vectors[0].1.len();
+                let config = TurboQuantConfig {
+                    dimension: dim,
+                    bit_width: 3,
+                    seed: 42,
+                };
+                let mut idx = TurboQuantIndex::new(config)?;
+                for (entity_id, vec) in &all_vectors {
+                    idx.add_vector(*entity_id, vec)?;
+                }
+                save_turboquant_cache(conn, &idx, vector_count)?;
+                idx
+            }
         };
-        let mut index = TurboQuantIndex::new(config)?;
-        for (entity_id, vec) in &all_vectors {
-            index.add_vector(*entity_id, vec)?;
-        }
 
-        let k = self.config.top_k_candidates.min(all_vectors.len());
-        let results = index.search(query_vec, k)?;
-        Ok(results) // already Vec<(i64, f32)>
+        let k = self.config.top_k_candidates.min(vector_count as usize);
+        index.search(query_vec, k)
     }
 
     /// Stage 2: exact cosine rerank.
@@ -365,6 +378,54 @@ impl RagEngine {
 // ─────────────────────────────────────────────────────────────────────────────
 // Utility
 // ─────────────────────────────────────────────────────────────────────────────
+
+/// Load a TurboQuant index from the SQLite cache if it is still valid.
+///
+/// Returns `None` if no cache row exists or the cached vector count does not
+/// match `current_count` (meaning the index is stale).
+fn load_turboquant_cache(
+    conn: &Connection,
+    current_count: i64,
+) -> Result<Option<TurboQuantIndex>> {
+    let mut stmt = conn.prepare(
+        "SELECT index_blob, vector_count FROM kg_turboquant_cache WHERE id = 1",
+    )?;
+
+    let result = stmt.query_row([], |row| {
+        let blob: Vec<u8> = row.get(0)?;
+        let cached_count: i64 = row.get(1)?;
+        Ok((blob, cached_count))
+    });
+
+    match result {
+        Ok((blob, cached_count)) if cached_count == current_count => {
+            let index = TurboQuantIndex::from_bytes(&blob)
+                .map_err(|e| crate::error::Error::Other(e.to_string()))?;
+            Ok(Some(index))
+        }
+        Ok(_) | Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// Persist a TurboQuant index into `kg_turboquant_cache` (upsert).
+fn save_turboquant_cache(
+    conn: &Connection,
+    index: &TurboQuantIndex,
+    vector_count: i64,
+) -> Result<()> {
+    let blob = index
+        .to_bytes()
+        .map_err(|e| crate::error::Error::Other(e.to_string()))?;
+    conn.execute(
+        "INSERT INTO kg_turboquant_cache (id, index_blob, vector_count) \
+         VALUES (1, ?1, ?2) \
+         ON CONFLICT(id) DO UPDATE SET index_blob = excluded.index_blob, \
+                                       vector_count = excluded.vector_count",
+        rusqlite::params![blob, vector_count],
+    )?;
+    Ok(())
+}
 
 fn load_all_vectors(conn: &Connection) -> Result<Vec<(i64, Vec<f32>)>> {
     let mut stmt = conn.prepare("SELECT entity_id, vector, dimension FROM kg_vectors")?;

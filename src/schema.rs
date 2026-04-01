@@ -131,6 +131,18 @@ pub fn create_schema(conn: &Connection) -> Result<()> {
         [],
     )?;
 
+    // TurboQuant persistent index cache (singleton row, id always 1)
+    tx.execute(
+        r#"
+        CREATE TABLE IF NOT EXISTS kg_turboquant_cache (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            index_blob BLOB NOT NULL,
+            vector_count INTEGER NOT NULL
+        )
+        "#,
+        [],
+    )?;
+
     tx.commit()?;
     Ok(())
 }

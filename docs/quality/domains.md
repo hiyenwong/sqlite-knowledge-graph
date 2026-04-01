@@ -1,6 +1,6 @@
 # Quality Status by Domain
 
-Last updated: 2026-04-01 | Version: v0.10.1
+Last updated: 2026-04-01 | Version: v0.10.2
 
 ## Summary
 
@@ -46,4 +46,7 @@ Last updated: 2026-04-01 | Version: v0.10.1
 
 所有 P0/P1/P2 问题已全部修复。下一步可考虑：
 - RAG `SubprocessEmbedder` 集成测试（需外部 Python 服务）
-- 持久化 TurboQuant 索引（避免每次查询重建）
+
+## 已完成优化
+
+- **持久化 TurboQuant 索引** ✅（v0.10.2）：索引序列化存入 `kg_turboquant_cache` 表，以向量数量为版本号，同一 DB 多次 RAG 查询只建一次索引
