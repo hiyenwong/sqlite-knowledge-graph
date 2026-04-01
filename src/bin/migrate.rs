@@ -418,7 +418,10 @@ fn run_find_related(args: &[String]) -> Result<(), Error> {
 
     let kg = KnowledgeGraph::open(&db_path)?;
 
-    println!("🔗 Related entities for Entity {} (threshold >= {:.2})", entity_id, threshold);
+    println!(
+        "🔗 Related entities for Entity {} (threshold >= {:.2})",
+        entity_id, threshold
+    );
     println!();
 
     let results = kg.kg_find_related(entity_id, threshold)?;

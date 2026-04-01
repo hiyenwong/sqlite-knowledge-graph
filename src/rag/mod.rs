@@ -383,13 +383,9 @@ impl RagEngine {
 ///
 /// Returns `None` if no cache row exists or the cached vector count does not
 /// match `current_count` (meaning the index is stale).
-fn load_turboquant_cache(
-    conn: &Connection,
-    current_count: i64,
-) -> Result<Option<TurboQuantIndex>> {
-    let mut stmt = conn.prepare(
-        "SELECT index_blob, vector_count FROM kg_turboquant_cache WHERE id = 1",
-    )?;
+fn load_turboquant_cache(conn: &Connection, current_count: i64) -> Result<Option<TurboQuantIndex>> {
+    let mut stmt =
+        conn.prepare("SELECT index_blob, vector_count FROM kg_turboquant_cache WHERE id = 1")?;
 
     let result = stmt.query_row([], |row| {
         let blob: Vec<u8> = row.get(0)?;
@@ -595,5 +591,114 @@ mod tests {
         assert!(e1_result.is_some());
         let ctx = &e1_result.unwrap().context_entities;
         assert!(!ctx.is_empty(), "e1 should have context neighbours");
+    }
+
+    // ── TurboQuant cache tests ────────────────────────────────────────────────
+
+    #[test]
+    fn test_cache_written_on_first_query() {
+        let dim = 4;
+        let (conn, _ids) = setup(dim);
+
+        let mut query = vec![0.0f32; dim];
+        query[0] = 1.0;
+        let embedder = FixedEmbedder(query);
+        let engine = RagEngine::new(RagConfig {
+            vector_dimension: dim,
+            top_k_candidates: 10,
+            top_k_rerank: 5,
+            ..Default::default()
+        });
+
+        engine.search(&conn, &embedder, "q", 2).unwrap();
+
+        // Cache row must exist after the first search
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM kg_turboquant_cache WHERE id = 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1, "cache row should be created after first query");
+    }
+
+    #[test]
+    fn test_cache_hit_on_second_query() {
+        let dim = 4;
+        let (conn, _ids) = setup(dim);
+
+        let mut query = vec![0.0f32; dim];
+        query[0] = 1.0;
+        let embedder = FixedEmbedder(query);
+        let engine = RagEngine::new(RagConfig {
+            vector_dimension: dim,
+            top_k_candidates: 10,
+            top_k_rerank: 5,
+            ..Default::default()
+        });
+
+        let r1 = engine.search(&conn, &embedder, "q", 2).unwrap();
+        let r2 = engine.search(&conn, &embedder, "q", 2).unwrap();
+
+        // Both searches return the same top entity
+        assert_eq!(
+            r1[0].entity.id, r2[0].entity.id,
+            "cache hit should return identical results"
+        );
+    }
+
+    #[test]
+    fn test_cache_invalidated_after_new_vector() {
+        let dim = 4;
+        let (conn, _ids) = setup(dim);
+
+        let mut query = vec![0.0f32; dim];
+        query[0] = 1.0;
+        let embedder = FixedEmbedder(query);
+        let engine = RagEngine::new(RagConfig {
+            vector_dimension: dim,
+            top_k_candidates: 10,
+            top_k_rerank: 5,
+            ..Default::default()
+        });
+
+        // First search — writes cache with vector_count = 3
+        engine.search(&conn, &embedder, "q", 2).unwrap();
+
+        let cached_count_before: i64 = conn
+            .query_row(
+                "SELECT vector_count FROM kg_turboquant_cache WHERE id = 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(cached_count_before, 3);
+
+        // Add a 4th vector
+        let e4 = crate::graph::entity::insert_entity(
+            &conn,
+            &crate::graph::entity::Entity::new("doc", "Doc D"),
+        )
+        .unwrap();
+        let store = VectorStore::new();
+        let mut v4 = vec![0.0f32; dim];
+        v4[2] = 1.0;
+        store.insert_vector(&conn, e4, v4).unwrap();
+
+        // Second search — must rebuild and update cache to vector_count = 4
+        engine.search(&conn, &embedder, "q", 2).unwrap();
+
+        let cached_count_after: i64 = conn
+            .query_row(
+                "SELECT vector_count FROM kg_turboquant_cache WHERE id = 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            cached_count_after, 4,
+            "cache should be rebuilt after new vector added"
+        );
     }
 }

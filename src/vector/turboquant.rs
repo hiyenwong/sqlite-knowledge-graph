@@ -570,4 +570,31 @@ mod tests {
         assert_eq!(stats.num_vectors, 2);
         assert_eq!(stats.dimension, 384);
     }
+
+    #[test]
+    fn test_to_bytes_from_bytes_roundtrip() {
+        let config = TurboQuantConfig {
+            dimension: 64,
+            bit_width: 3,
+            seed: 42,
+        };
+        let mut index = TurboQuantIndex::new(config).unwrap();
+        let vec: Vec<f32> = (0..64).map(|i| i as f32 / 64.0).collect();
+        index.add_vector(1, &vec).unwrap();
+        index.add_vector(2, &vec).unwrap();
+
+        let bytes = index.to_bytes().unwrap();
+        assert!(!bytes.is_empty());
+
+        let restored = TurboQuantIndex::from_bytes(&bytes).unwrap();
+        assert_eq!(restored.config.dimension, 64);
+        assert_eq!(restored.config.bit_width, 3);
+        assert_eq!(restored.len(), 2);
+
+        // Search results must be identical before and after round-trip
+        let query: Vec<f32> = (0..64).map(|i| i as f32 / 64.0).collect();
+        let original_results = index.search(&query, 2).unwrap();
+        let restored_results = restored.search(&query, 2).unwrap();
+        assert_eq!(original_results, restored_results);
+    }
 }

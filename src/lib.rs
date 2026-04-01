@@ -641,4 +641,81 @@ mod tests {
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].entity_id, id1);
     }
+
+    // ── kg_find_related tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_find_related_above_threshold() {
+        let kg = KnowledgeGraph::open_in_memory().unwrap();
+        let id1 = kg.insert_entity(&Entity::new("paper", "A")).unwrap();
+        let id2 = kg.insert_entity(&Entity::new("paper", "B")).unwrap();
+        let id3 = kg.insert_entity(&Entity::new("paper", "C")).unwrap();
+
+        kg.insert_relation(&Relation::new(id1, id2, "related", 0.9).unwrap())
+            .unwrap();
+        kg.insert_relation(&Relation::new(id1, id3, "related", 0.3).unwrap())
+            .unwrap();
+
+        let results = kg.kg_find_related(id1, 0.5).unwrap();
+        assert_eq!(
+            results.len(),
+            1,
+            "only B (weight 0.9) should pass threshold 0.5"
+        );
+        assert_eq!(results[0].0.id, Some(id2));
+    }
+
+    #[test]
+    fn test_find_related_sorted_descending() {
+        let kg = KnowledgeGraph::open_in_memory().unwrap();
+        let id1 = kg.insert_entity(&Entity::new("paper", "A")).unwrap();
+        let id2 = kg.insert_entity(&Entity::new("paper", "B")).unwrap();
+        let id3 = kg.insert_entity(&Entity::new("paper", "C")).unwrap();
+
+        kg.insert_relation(&Relation::new(id1, id2, "related", 0.4).unwrap())
+            .unwrap();
+        kg.insert_relation(&Relation::new(id1, id3, "related", 0.9).unwrap())
+            .unwrap();
+
+        let results = kg.kg_find_related(id1, 0.0).unwrap();
+        assert_eq!(results.len(), 2);
+        assert!(
+            results[0].1 >= results[1].1,
+            "results should be sorted by weight desc"
+        );
+        assert_eq!(results[0].0.id, Some(id3)); // weight 0.9 first
+    }
+
+    #[test]
+    fn test_find_related_threshold_one() {
+        let kg = KnowledgeGraph::open_in_memory().unwrap();
+        let id1 = kg.insert_entity(&Entity::new("paper", "A")).unwrap();
+        let id2 = kg.insert_entity(&Entity::new("paper", "B")).unwrap();
+        let id3 = kg.insert_entity(&Entity::new("paper", "C")).unwrap();
+
+        kg.insert_relation(&Relation::new(id1, id2, "related", 1.0).unwrap())
+            .unwrap();
+        kg.insert_relation(&Relation::new(id1, id3, "related", 0.9).unwrap())
+            .unwrap();
+
+        let results = kg.kg_find_related(id1, 1.0).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].0.id, Some(id2));
+    }
+
+    #[test]
+    fn test_find_related_no_neighbours() {
+        let kg = KnowledgeGraph::open_in_memory().unwrap();
+        let id1 = kg.insert_entity(&Entity::new("paper", "Isolated")).unwrap();
+
+        let results = kg.kg_find_related(id1, 0.0).unwrap();
+        assert!(results.is_empty(), "isolated entity should return empty");
+    }
+
+    #[test]
+    fn test_find_related_entity_not_found() {
+        let kg = KnowledgeGraph::open_in_memory().unwrap();
+        let result = kg.kg_find_related(9999, 0.5);
+        assert!(result.is_err(), "non-existent entity should return error");
+    }
 }
