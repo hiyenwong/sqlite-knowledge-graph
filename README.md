@@ -18,9 +18,11 @@ A Rust library for building and querying knowledge graphs using SQLite as the ba
 - **Connectivity**: Connected components (weak and strong)
 
 ### RAG Integration ✅
-- **Semantic Search**: Vector similarity search
-- **Context Retrieval**: Multi-hop context extraction
-- **Hybrid Search**: Combine keyword and semantic search
+- **Two-Stage Retrieval**: TurboQuant ANN (Stage 1) → exact cosine rerank (Stage 2) — *MemRL*
+- **Graph Expansion**: BFS-based candidate expansion via graph neighbours — *RAPO*
+- **Context Sizing**: Pool-prioritised BFS context collection per result — *Memex(RL)*
+- **Quality Filtering**: Configurable score thresholds — *SuperLocalMemory*
+- **Pluggable Embedder**: `Embedder` trait with `SubprocessEmbedder` (Python line protocol) built-in
 
 ### SQLite Extension ✅
 - **Loadable Extension**: Use as SQLite extension (.dylib/.so)
@@ -157,10 +159,16 @@ impl KnowledgeGraph {
     pub fn insert_vector(&self, entity_id: i64, vector: Vec<f32>) -> Result<()>
     pub fn search_vectors(&self, query: Vec<f32>, k: usize) -> Result<Vec<SearchResult>>
 
-    // RAG functions
-    pub fn kg_semantic_search(&self, query_embedding: Vec<f32>, k: usize) -> Result<Vec<SearchResult>>
-    pub fn kg_get_context(&self, entity_id: i64, depth: u32) -> Result<EntityContext>
+    // Legacy RAG helpers (simple, no graph expansion)
+    pub fn kg_semantic_search(&self, query_embedding: Vec<f32>, k: usize) -> Result<Vec<SearchResultWithEntity>>
+    pub fn kg_get_context(&self, entity_id: i64, depth: u32) -> Result<GraphContext>
     pub fn kg_hybrid_search(&self, query_text: &str, query_embedding: Vec<f32>, k: usize) -> Result<Vec<HybridSearchResult>>
+}
+
+// Paper-driven two-stage RAG engine (recommended)
+impl RagEngine {
+    pub fn new(config: RagConfig) -> Self
+    pub fn search(&self, conn: &Connection, embedder: &dyn Embedder, query: &str, k: usize) -> Result<Vec<RagResult>>
 }
 ```
 
@@ -180,6 +188,31 @@ let config = PageRankConfig {
 let rankings = kg.kg_pagerank(Some(config))?;
 for (entity_id, score) in rankings.iter().take(10) {
     println!("Entity {}: score = {:.4}", entity_id, score);
+}
+```
+
+### Paper-Driven RAG Engine
+
+```rust
+use sqlite_knowledge_graph::{RagEngine, RagConfig, embedder::SubprocessEmbedder};
+
+// Spin up a Python embedding subprocess (see Installation above)
+let embedder = SubprocessEmbedder::new("python3", &["embed_server.py"])?;
+
+let engine = RagEngine::new(RagConfig {
+    top_k_candidates: 50,      // Stage-1 ANN breadth (MemRL)
+    top_k_rerank: 20,          // Stage-2 exact rerank (MemRL)
+    enable_graph_expansion: true, // RAPO graph expansion
+    max_context_entities: 5,   // Memex(RL) context limit
+    min_combined_score: 0.3,   // SuperLocalMemory quality gate
+    ..RagConfig::default()
+});
+
+let results = engine.search(kg.connection(), &embedder, "transformer architecture", 5)?;
+for r in results {
+    println!("{} (v={:.3} g={:.3} c={:.3})",
+        r.entity.name, r.vector_score, r.graph_score, r.combined_score);
+    println!("  context: {:?}", r.context_entities.iter().map(|e| &e.name).collect::<Vec<_>>());
 }
 ```
 
@@ -387,7 +420,8 @@ Benchmarks on a knowledge graph with 2,619 entities and 1.48M relations:
 | More Extension Functions | ✅ Complete (v0.7.0) |
 | **Vector Indexing (TurboQuant)** | ✅ **Complete (v0.8.0)** |
 | **Higher-order Relations (Hyperedge)** | ✅ **Complete (v0.10.0)** |
-| Graph Visualization Export | ⏳ Planned |
+| **Paper-driven RAG Engine** | ✅ **Complete (v0.10.1)** |
+| Graph Visualization Export (D3/DOT) | ✅ Complete |
 | Async API | ⏳ Planned |
 
 ## Testing
@@ -403,7 +437,7 @@ cargo test -- --nocapture
 cargo test test_pagerank
 ```
 
-Current test coverage: **38 tests passing**
+Current test coverage: **95 unit tests + 2 integration tests passing**
 
 ## Projects Using This Library
 
