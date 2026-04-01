@@ -18,6 +18,7 @@ fn main() -> Result<(), Error> {
         "search" => run_search(&args),
         "stats" => run_stats(&args),
         "context" => run_context(&args),
+        "find-related" => run_find_related(&args),
         _ => {
             eprintln!("Unknown command: {}", command);
             print_usage();
@@ -37,6 +38,7 @@ fn print_usage() {
     println!("  search       Semantic search with optional RAG context");
     println!("  stats        Show statistics about the knowledge graph");
     println!("  context      Get graph context for an entity");
+    println!("  find-related Find entities related above a weight threshold");
     println!();
     println!("Migration command:");
     println!("  sqlite-kg migrate --source <knowledge.db> --skills <skills_dir> --target <kg.db>");
@@ -52,6 +54,9 @@ fn print_usage() {
     println!();
     println!("Context command:");
     println!("  sqlite-kg context <entity_id> --depth <num> --db <kg.db>");
+    println!();
+    println!("Find-related command:");
+    println!("  sqlite-kg find-related <entity_id> --threshold <0.0-1.0> --db <kg.db>");
 }
 
 fn run_migrate(args: &[String]) -> Result<(), Error> {
@@ -370,6 +375,67 @@ fn run_stats(args: &[String]) -> Result<(), Error> {
     println!("Top 5 papers by utility:");
     for (idx, (paper, utility)) in high_utility.iter().take(5).enumerate() {
         println!("  {}. {} ({:.2})", idx + 1, paper.name, utility);
+    }
+
+    Ok(())
+}
+
+fn run_find_related(args: &[String]) -> Result<(), Error> {
+    let mut entity_id: i64 = 0;
+    let mut threshold: f64 = 0.5;
+    let mut db_path = "kg.db".to_string();
+
+    let mut i = 2;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--threshold" => {
+                i += 1;
+                if i < args.len() {
+                    threshold = args[i].parse().unwrap_or(0.5);
+                }
+            }
+            "--db" => {
+                i += 1;
+                if i < args.len() {
+                    db_path = args[i].clone();
+                }
+            }
+            _ if entity_id == 0 => {
+                entity_id = args[i].parse().unwrap_or(0);
+            }
+            _ => {
+                eprintln!("Unknown option: {}", args[i]);
+                std::process::exit(1);
+            }
+        }
+        i += 1;
+    }
+
+    if entity_id == 0 {
+        eprintln!("Error: entity_id is required");
+        std::process::exit(1);
+    }
+
+    let kg = KnowledgeGraph::open(&db_path)?;
+
+    println!("🔗 Related entities for Entity {} (threshold >= {:.2})", entity_id, threshold);
+    println!();
+
+    let results = kg.kg_find_related(entity_id, threshold)?;
+
+    if results.is_empty() {
+        println!("No related entities found above threshold {:.2}", threshold);
+    } else {
+        println!("Found {} related entities:", results.len());
+        for (idx, (entity, weight)) in results.iter().enumerate() {
+            println!(
+                "  {}. [{}] {} (weight: {:.3})",
+                idx + 1,
+                entity.entity_type,
+                entity.name,
+                weight
+            );
+        }
     }
 
     Ok(())

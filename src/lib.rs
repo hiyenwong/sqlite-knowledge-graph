@@ -435,6 +435,25 @@ impl KnowledgeGraph {
         Ok(hybrid_results)
     }
 
+    /// Find entities related to `entity_id` whose connecting relation weight
+    /// is at or above `threshold`.  Depth-1 neighbours only.
+    ///
+    /// Returns `(entity, relation_weight)` pairs sorted by weight descending.
+    pub fn kg_find_related(
+        &self,
+        entity_id: i64,
+        threshold: f64,
+    ) -> Result<Vec<(graph::Entity, f64)>> {
+        let neighbours = self.get_neighbors(entity_id, 1)?;
+        let mut results: Vec<(graph::Entity, f64)> = neighbours
+            .into_iter()
+            .filter(|n| n.relation.weight >= threshold)
+            .map(|n| (n.entity, n.relation.weight))
+            .collect();
+        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        Ok(results)
+    }
+
     // ========== Graph Traversal Functions ==========
 
     /// BFS traversal from a starting entity.
