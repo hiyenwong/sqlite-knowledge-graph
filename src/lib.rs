@@ -25,6 +25,7 @@ pub mod extension;
 pub mod functions;
 pub mod graph;
 pub mod migrate;
+pub mod rag;
 pub mod schema;
 pub mod vector;
 
@@ -46,6 +47,7 @@ pub use graph::{HigherOrderNeighbor, HigherOrderPath, HigherOrderPathStep, Hyper
 pub use migrate::{
     build_relationships, migrate_all, migrate_papers, migrate_skills, MigrationStats,
 };
+pub use rag::{embedder::Embedder, embedder::FixedEmbedder, RagConfig, RagEngine, RagResult};
 pub use schema::{create_schema, schema_exists};
 pub use vector::{cosine_similarity, SearchResult, VectorStore};
 pub use vector::{TurboQuantConfig, TurboQuantIndex, TurboQuantStats};
