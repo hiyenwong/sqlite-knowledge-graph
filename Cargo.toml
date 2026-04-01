@@ -1,6 +1,6 @@
 [package]
 name = "sqlite-knowledge-graph"
-version = "0.10.1"
+version = "0.10.2"
 edition = "2021"
 authors = ["Hi Yen Wong"]
 description = "A Rust library for building and querying knowledge graphs using SQLite as the backend, with graph algorithms, vector search, and RAG support"
