@@ -7,9 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.10.2] - 2026-04-01
+
+### Performance
+
+- **Persistent TurboQuant Index** - Eliminated per-query index rebuild in RAG Stage 1
+  - Index serialized as JSON BLOB and stored in new `kg_turboquant_cache` table
+  - Cache invalidated automatically when `kg_vectors` row count changes
+  - Same database with repeated RAG queries now builds the index only once
+  - `TurboQuantIndex::to_bytes()` / `from_bytes()` added for BLOB round-trip
+
+### Technical
+
+- New table: `kg_turboquant_cache` (singleton row, `id = 1`)
+- 95 tests passing
+
+---
+
+## [0.10.1] - 2026-03-31
+
+### Fixed
+
+- All P0/P1/P2 quality issues resolved
+  - Louvain Phase 2 super-node aggregation implemented (`P1-1`)
+  - Remaining bare `.unwrap()` calls replaced with `map_err(?)` (`P0-5`)
+
+### Technical
+
+- 95 tests passing
+
+---
+
+## [0.10.0] - 2026-03-31
+
 ### Added
 
-- Placeholder for upcoming features
+- **Paper-driven two-stage RAG Engine** (`src/rag/mod.rs`)
+  - Stage 1 (MemRL): TurboQuant ANN fast candidate retrieval
+  - Stage 2 (MemRL): exact cosine rerank
+  - RAPO: BFS graph-neighbour expansion
+  - SuperLocalMemory: quality threshold filtering
+  - Memex(RL): context entity BFS attachment
+  - `RagEngine`, `RagConfig`, `RagResult` public types
+
+### References
+
+- MemRL (2601.03192), RAPO (2603.02958), Memex (2603.03561)
+- SuperLocalMemory (2602.13398), NN-RAG (2511.20333)
+
+### Technical
+
+- 95 tests passing
 
 ---
 
@@ -295,17 +345,31 @@ sqlite-kg search "brain network" --k 5 --db kg.db
 
 | Version | Date | Key Features |
 |---------|------|--------------|
-| 0.7.0 | 2026-03-25 | More Extension Functions (PageRank, Louvain, BFS, Shortest Path) |
-| 0.6.0 | 2026-03-25 | SQLite Extension Support |
-| 0.5.0 | 2026-03-25 | Graph Algorithms (PageRank, Louvain, Connected Components) |
-| 0.4.0 | 2026-03-25 | Graph Traversal (BFS, DFS, Shortest Path) |
+| 0.10.2 | 2026-04-01 | Persistent TurboQuant index (SQLite cache) |
+| 0.10.1 | 2026-03-31 | All P0/P1/P2 quality issues resolved |
+| 0.10.0 | 2026-03-31 | Paper-driven two-stage RAG engine |
+| 0.9.0 | 2026-03-26 | Vector embedding generation (sentence-transformers) |
+| 0.8.0 | 2026-03-25 | TurboQuant vector indexing (ANN) |
+| 0.7.0 | 2026-03-25 | More extension functions (PageRank, Louvain, BFS, Shortest Path) |
+| 0.6.0 | 2026-03-25 | SQLite extension support |
+| 0.5.0 | 2026-03-25 | Graph algorithms (PageRank, Louvain, Connected Components) |
+| 0.4.0 | 2026-03-25 | Graph traversal (BFS, DFS, Shortest Path) |
 | 0.3.0 | 2026-03-25 | RAG integration, data migration |
 | 0.2.0 | 2026-03-24 | Core modules (entity, relation, vector) |
 | 0.1.0 | 2026-03-24 | Project initialization |
 
 ---
 
-[Unreleased]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.10.2...HEAD
+[0.10.2]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.10.1...v0.10.2
+[0.10.1]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.10.0...v0.10.1
+[0.10.0]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.9.0...v0.10.0
+[0.9.0]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/hiyenwong/sqlite-knowledge-graph/releases/tag/v0.3.0
 [0.2.0]: https://github.com/hiyenwong/sqlite-knowledge-graph/releases/tag/v0.2.0
 [0.1.0]: https://github.com/hiyenwong/sqlite-knowledge-graph/releases/tag/v0.1.0
