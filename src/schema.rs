@@ -31,9 +31,7 @@ const CURRENT_SCHEMA_VERSION: i32 = 2;
 /// - An already fully-migrated database (fast no-op path).
 pub fn ensure_schema(conn: &Connection) -> Result<()> {
     // Bootstrap: create the version table.  This is idempotent.
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS kg_schema_version (version INTEGER NOT NULL);",
-    )?;
+    conn.execute_batch("CREATE TABLE IF NOT EXISTS kg_schema_version (version INTEGER NOT NULL);")?;
 
     // Read the stored version, if any.
     let stored: Option<i32> = conn

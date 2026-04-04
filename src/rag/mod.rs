@@ -737,11 +737,8 @@ mod tests {
             .unwrap();
 
         // Delete one vector and insert a brand-new one (autoincrement → higher id).
-        conn.execute(
-            "DELETE FROM kg_vectors WHERE entity_id = ?1",
-            [ids[2]],
-        )
-        .unwrap();
+        conn.execute("DELETE FROM kg_vectors WHERE entity_id = ?1", [ids[2]])
+            .unwrap();
         let e_new = crate::graph::entity::insert_entity(
             &conn,
             &crate::graph::entity::Entity::new("doc", "Doc Swap"),
