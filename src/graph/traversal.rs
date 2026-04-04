@@ -336,7 +336,7 @@ fn get_outgoing_relations(conn: &Connection, entity_id: i64) -> Result<Vec<(i64,
         Ok((
             row.get::<_, i64>(0)?,
             row.get::<_, String>(1)?,
-            row.get::<_, f64>(2)?,
+            crate::row_get_weight(row, 2)?,
         ))
     })?;
 

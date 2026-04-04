@@ -29,6 +29,30 @@ pub mod rag;
 pub mod schema;
 pub mod vector;
 
+/// Read a weight column that may be stored as REAL, INTEGER, NULL, or 8-byte BLOB.
+///
+/// Python's sqlite3 module stores numpy.float64 as a little-endian IEEE 754
+/// BLOB instead of REAL. This helper handles all storage variants so callers
+/// do not crash with `InvalidColumnType` on externally-written databases.
+pub(crate) fn row_get_weight(row: &rusqlite::Row, col: usize) -> rusqlite::Result<f64> {
+    use rusqlite::types::ValueRef;
+    match row.get_ref(col)? {
+        ValueRef::Real(f) => Ok(f),
+        ValueRef::Integer(i) => Ok(i as f64),
+        ValueRef::Null => Ok(1.0), // schema DEFAULT 1.0
+        ValueRef::Blob(b) if b.len() == 8 => {
+            let mut bytes = [0u8; 8];
+            bytes.copy_from_slice(b);
+            Ok(f64::from_le_bytes(bytes)) // numpy on LE systems (x86/arm64)
+        }
+        _ => Err(rusqlite::Error::InvalidColumnType(
+            col,
+            "weight".into(),
+            rusqlite::types::Type::Real,
+        )),
+    }
+}
+
 pub use algorithms::{
     analyze_graph, connected_components, louvain_communities, pagerank, CommunityResult,
     PageRankConfig,
