@@ -1,6 +1,6 @@
 # Quality Status by Domain
 
-Last updated: 2026-04-01 | Version: v0.10.2
+Last updated: 2026-04-02 | Version: v0.10.3
 
 ## Summary
 
@@ -50,3 +50,5 @@ Last updated: 2026-04-01 | Version: v0.10.2
 ## 已完成优化
 
 - **持久化 TurboQuant 索引** ✅（v0.10.2）：索引序列化存入 `kg_turboquant_cache` 表，以向量数量为版本号，同一 DB 多次 RAG 查询只建一次索引
+- **Schema 自动迁移** ✅（v0.10.3）：`kg_schema_version` 表 + `ensure_schema()` 迁移运行器，支持增量升级（含旧 DB 探测）；`create_schema()` 保持向后兼容
+- **缓存失效策略升级** ✅（v0.10.3）：`kg_turboquant_cache` 新增 `vectors_checksum`（`SUM(entity_id)`），count + checksum 双重校验，防止同等数量但不同向量集导致的缓存误判

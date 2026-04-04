@@ -179,8 +179,11 @@ impl RagEngine {
 
     /// Stage 1: ANN via TurboQuant.  Returns (entity_id, approx_score) pairs.
     ///
-    /// The TurboQuant index is persisted in `kg_turboquant_cache` and only
-    /// rebuilt when the number of vectors in `kg_vectors` has changed.
+    /// The TurboQuant index is persisted in `kg_turboquant_cache` and rebuilt
+    /// whenever either the *count* or the *checksum* of vectors in `kg_vectors`
+    /// has changed.  Using both metrics catches the case where one vector is
+    /// deleted and a different one is inserted (count stays the same but the
+    /// set of entity_ids — and therefore their SUM — changes).
     fn stage1_ann(&self, conn: &Connection, query_vec: &[f32]) -> Result<Vec<(i64, f32)>> {
         let vector_count: i64 =
             conn.query_row("SELECT COUNT(*) FROM kg_vectors", [], |r| r.get(0))?;
@@ -189,8 +192,16 @@ impl RagEngine {
             return Ok(Vec::new());
         }
 
+        // Lightweight fingerprint: SUM of all entity_ids in kg_vectors.
+        // Autoincrement IDs are never reused, so any insert/delete changes this.
+        let vectors_checksum: i64 = conn.query_row(
+            "SELECT COALESCE(SUM(entity_id), 0) FROM kg_vectors",
+            [],
+            |r| r.get(0),
+        )?;
+
         // Try to load a valid cached index first.
-        let cached = load_turboquant_cache(conn, vector_count)?;
+        let cached = load_turboquant_cache(conn, vector_count, vectors_checksum)?;
         let index = match cached {
             Some(idx) => idx,
             None => {
@@ -206,7 +217,7 @@ impl RagEngine {
                 for (entity_id, vec) in &all_vectors {
                     idx.add_vector(*entity_id, vec)?;
                 }
-                save_turboquant_cache(conn, &idx, vector_count)?;
+                save_turboquant_cache(conn, &idx, vector_count, vectors_checksum)?;
                 idx
             }
         };
@@ -381,20 +392,29 @@ impl RagEngine {
 
 /// Load a TurboQuant index from the SQLite cache if it is still valid.
 ///
-/// Returns `None` if no cache row exists or the cached vector count does not
-/// match `current_count` (meaning the index is stale).
-fn load_turboquant_cache(conn: &Connection, current_count: i64) -> Result<Option<TurboQuantIndex>> {
-    let mut stmt =
-        conn.prepare("SELECT index_blob, vector_count FROM kg_turboquant_cache WHERE id = 1")?;
+/// Returns `None` if no cache row exists or either the vector count or the
+/// checksum does not match, indicating the index is stale.
+fn load_turboquant_cache(
+    conn: &Connection,
+    current_count: i64,
+    current_checksum: i64,
+) -> Result<Option<TurboQuantIndex>> {
+    let mut stmt = conn.prepare(
+        "SELECT index_blob, vector_count, vectors_checksum \
+         FROM kg_turboquant_cache WHERE id = 1",
+    )?;
 
     let result = stmt.query_row([], |row| {
         let blob: Vec<u8> = row.get(0)?;
         let cached_count: i64 = row.get(1)?;
-        Ok((blob, cached_count))
+        let cached_checksum: i64 = row.get(2)?;
+        Ok((blob, cached_count, cached_checksum))
     });
 
     match result {
-        Ok((blob, cached_count)) if cached_count == current_count => {
+        Ok((blob, cached_count, cached_checksum))
+            if cached_count == current_count && cached_checksum == current_checksum =>
+        {
             let index = TurboQuantIndex::from_bytes(&blob)
                 .map_err(|e| crate::error::Error::Other(e.to_string()))?;
             Ok(Some(index))
@@ -409,16 +429,20 @@ fn save_turboquant_cache(
     conn: &Connection,
     index: &TurboQuantIndex,
     vector_count: i64,
+    vectors_checksum: i64,
 ) -> Result<()> {
     let blob = index
         .to_bytes()
         .map_err(|e| crate::error::Error::Other(e.to_string()))?;
     conn.execute(
-        "INSERT INTO kg_turboquant_cache (id, index_blob, vector_count) \
-         VALUES (1, ?1, ?2) \
-         ON CONFLICT(id) DO UPDATE SET index_blob = excluded.index_blob, \
-                                       vector_count = excluded.vector_count",
-        rusqlite::params![blob, vector_count],
+        "INSERT INTO kg_turboquant_cache \
+             (id, index_blob, vector_count, vectors_checksum) \
+         VALUES (1, ?1, ?2, ?3) \
+         ON CONFLICT(id) DO UPDATE SET \
+             index_blob        = excluded.index_blob, \
+             vector_count      = excluded.vector_count, \
+             vectors_checksum  = excluded.vectors_checksum",
+        rusqlite::params![blob, vector_count, vectors_checksum],
     )?;
     Ok(())
 }
@@ -645,6 +669,104 @@ mod tests {
         assert_eq!(
             r1[0].entity.id, r2[0].entity.id,
             "cache hit should return identical results"
+        );
+    }
+
+    #[test]
+    fn test_cache_stores_checksum() {
+        let dim = 4;
+        let (conn, _ids) = setup(dim);
+
+        let query = {
+            let mut q = vec![0.0f32; dim];
+            q[0] = 1.0;
+            q
+        };
+        let embedder = FixedEmbedder(query);
+        let engine = RagEngine::new(RagConfig {
+            vector_dimension: dim,
+            top_k_candidates: 10,
+            top_k_rerank: 5,
+            ..Default::default()
+        });
+
+        engine.search(&conn, &embedder, "q", 2).unwrap();
+
+        // Both count and checksum must be stored.
+        let (count, checksum): (i64, i64) = conn
+            .query_row(
+                "SELECT vector_count, vectors_checksum FROM kg_turboquant_cache WHERE id = 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(count, 3);
+        // SUM of entity_ids for 3 autoincrement entities must be > 0.
+        assert!(checksum > 0, "checksum should reflect entity_id sum");
+    }
+
+    #[test]
+    fn test_cache_invalidated_on_same_count_different_entity() {
+        // Verifies that swapping one vector (same count, different entity_id)
+        // causes a cache miss via the checksum.
+        let dim = 4;
+        let (conn, ids) = setup(dim); // 3 vectors: entity_ids ids[0], ids[1], ids[2]
+
+        let query = {
+            let mut q = vec![0.0f32; dim];
+            q[0] = 1.0;
+            q
+        };
+        let embedder = FixedEmbedder(query);
+        let engine = RagEngine::new(RagConfig {
+            vector_dimension: dim,
+            top_k_candidates: 10,
+            top_k_rerank: 5,
+            ..Default::default()
+        });
+
+        // First search — writes cache (count=3, checksum=ids[0]+ids[1]+ids[2]).
+        engine.search(&conn, &embedder, "q", 2).unwrap();
+
+        let checksum_before: i64 = conn
+            .query_row(
+                "SELECT vectors_checksum FROM kg_turboquant_cache WHERE id = 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+
+        // Delete one vector and insert a brand-new one (autoincrement → higher id).
+        conn.execute(
+            "DELETE FROM kg_vectors WHERE entity_id = ?1",
+            [ids[2]],
+        )
+        .unwrap();
+        let e_new = crate::graph::entity::insert_entity(
+            &conn,
+            &crate::graph::entity::Entity::new("doc", "Doc Swap"),
+        )
+        .unwrap();
+        let store = VectorStore::new();
+        let mut v_new = vec![0.0f32; dim];
+        v_new[3] = 1.0;
+        store.insert_vector(&conn, e_new, v_new).unwrap();
+        // count is still 3, but checksum changed because e_new.id != ids[2].
+
+        // Second search — must detect checksum mismatch → rebuild.
+        engine.search(&conn, &embedder, "q", 2).unwrap();
+
+        let (count_after, checksum_after): (i64, i64) = conn
+            .query_row(
+                "SELECT vector_count, vectors_checksum FROM kg_turboquant_cache WHERE id = 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(count_after, 3, "vector count should still be 3 after swap");
+        assert_ne!(
+            checksum_after, checksum_before,
+            "checksum must change after swapping one vector"
         );
     }
 
