@@ -222,7 +222,7 @@ fn query_links(conn: &Connection) -> Result<Vec<D3Link>> {
         let source: i64 = row.get(0)?;
         let target: i64 = row.get(1)?;
         let link_type: String = row.get(2)?;
-        let weight: f64 = row.get(3)?;
+        let weight = crate::row_get_weight(row, 3)?;
         Ok((source, target, link_type, weight))
     })?;
 

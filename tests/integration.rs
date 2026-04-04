@@ -101,6 +101,88 @@ fn test_integration_with_aerial_backup() {
     }
 }
 
+/// Verify that row_get_weight handles BLOB-stored weights (numpy.float64 pattern).
+/// Python's sqlite3 module stores numpy.float64 values as little-endian IEEE 754
+/// BLOB bytes instead of REAL.  The fix in src/lib.rs must decode them correctly
+/// so that louvain_communities (and other callers) do not crash with
+/// InvalidColumnType.
+#[test]
+fn test_blob_weight_louvain() {
+    use rusqlite::Connection;
+    use sqlite_knowledge_graph::louvain_communities;
+
+    let conn = Connection::open_in_memory().unwrap();
+
+    // Create minimal kg_entities / kg_relations schema
+    conn.execute_batch(
+        "CREATE TABLE kg_entities (
+            id INTEGER PRIMARY KEY,
+            entity_type TEXT,
+            name TEXT,
+            properties TEXT,
+            created_at TEXT,
+            updated_at TEXT
+        );
+        CREATE TABLE kg_relations (
+            id INTEGER PRIMARY KEY,
+            source_id INTEGER,
+            target_id INTEGER,
+            rel_type TEXT,
+            weight BLOB,
+            properties TEXT,
+            created_at TEXT
+        );",
+    )
+    .unwrap();
+
+    conn.execute(
+        "INSERT INTO kg_entities VALUES (1,'person','Alice','{}',datetime('now'),datetime('now'))",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO kg_entities VALUES (2,'person','Bob','{}',datetime('now'),datetime('now'))",
+        [],
+    )
+    .unwrap();
+
+    // Insert weight as 8-byte little-endian BLOB (numpy.float64 0.75)
+    let blob_weight: Vec<u8> = (0.75_f64).to_le_bytes().to_vec();
+    conn.execute(
+        "INSERT INTO kg_relations VALUES (1,1,2,'knows',?,'{}',datetime('now'))",
+        rusqlite::params![blob_weight],
+    )
+    .unwrap();
+
+    // Verify the type stored is indeed blob (sanity check)
+    let stored_type: String = conn
+        .query_row(
+            "SELECT typeof(weight) FROM kg_relations WHERE id=1",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(stored_type, "blob", "weight should be stored as BLOB");
+
+    // This must NOT panic/error — louvain uses row_get_weight internally
+    let result = louvain_communities(&conn);
+    assert!(
+        result.is_ok(),
+        "louvain_communities must not error on BLOB weight: {:?}",
+        result.err()
+    );
+
+    let community = result.unwrap();
+    assert_eq!(
+        community.num_communities, 1,
+        "two connected nodes should form 1 community"
+    );
+    println!(
+        "PASS: louvain on BLOB-weight DB returned {} community(ies), modularity={:.4}",
+        community.num_communities, community.modularity
+    );
+}
+
 #[test]
 fn test_embedding_generation() {
     // Check if sentence-transformers is available
