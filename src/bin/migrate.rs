@@ -19,6 +19,7 @@ fn main() -> Result<(), Error> {
         "stats" => run_stats(&args),
         "context" => run_context(&args),
         "find-related" => run_find_related(&args),
+        "similar" => run_similar(&args),
         _ => {
             eprintln!("Unknown command: {}", command);
             print_usage();
@@ -39,6 +40,7 @@ fn print_usage() {
     println!("  stats        Show statistics about the knowledge graph");
     println!("  context      Get graph context for an entity");
     println!("  find-related Find entities related above a weight threshold");
+    println!("  similar      Find similar entities by vector cosine similarity");
     println!();
     println!("Migration command:");
     println!("  sqlite-kg migrate --source <knowledge.db> --skills <skills_dir> --target <kg.db>");
@@ -57,6 +59,9 @@ fn print_usage() {
     println!();
     println!("Find-related command:");
     println!("  sqlite-kg find-related <entity_id> --threshold <0.0-1.0> --db <kg.db>");
+    println!();
+    println!("Similar command:");
+    println!("  sqlite-kg similar <entity_id> --k <num> --db <kg.db>");
 }
 
 fn run_migrate(args: &[String]) -> Result<(), Error> {
@@ -437,6 +442,70 @@ fn run_find_related(args: &[String]) -> Result<(), Error> {
                 entity.entity_type,
                 entity.name,
                 weight
+            );
+        }
+    }
+
+    Ok(())
+}
+
+fn run_similar(args: &[String]) -> Result<(), Error> {
+    let mut entity_id: i64 = 0;
+    let mut k: usize = 10;
+    let mut db_path = "kg.db".to_string();
+
+    let mut i = 2;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--k" => {
+                i += 1;
+                if i < args.len() {
+                    k = args[i].parse().unwrap_or(10);
+                }
+            }
+            "--db" => {
+                i += 1;
+                if i < args.len() {
+                    db_path = args[i].clone();
+                }
+            }
+            _ if entity_id == 0 => {
+                entity_id = args[i].parse().unwrap_or(0);
+            }
+            _ => {
+                eprintln!("Unknown option: {}", args[i]);
+                std::process::exit(1);
+            }
+        }
+        i += 1;
+    }
+
+    if entity_id == 0 {
+        eprintln!("Error: entity_id is required");
+        std::process::exit(1);
+    }
+
+    let kg = KnowledgeGraph::open(&db_path)?;
+
+    println!(
+        "🔍 Finding entities similar to Entity {} (top {})",
+        entity_id, k
+    );
+    println!();
+
+    let results = kg.kg_similar_entities(entity_id, k)?;
+
+    if results.is_empty() {
+        println!("No similar entities found (does this entity have a vector embedding?)");
+    } else {
+        println!("Found {} similar entities:", results.len());
+        for (idx, result) in results.iter().enumerate() {
+            println!(
+                "  {}. [{}] {} (similarity: {:.3})",
+                idx + 1,
+                result.entity.entity_type,
+                result.entity.name,
+                result.similarity
             );
         }
     }

@@ -459,6 +459,38 @@ impl KnowledgeGraph {
         Ok(hybrid_results)
     }
 
+    /// Find entities similar to `entity_id` by vector cosine similarity.
+    ///
+    /// Looks up the stored embedding for the given entity and performs a
+    /// nearest-neighbour search across all vectors.  The source entity is
+    /// excluded from results.
+    ///
+    /// Returns `(entity, similarity)` pairs sorted by similarity descending.
+    pub fn kg_similar_entities(
+        &self,
+        entity_id: i64,
+        k: usize,
+    ) -> Result<Vec<SearchResultWithEntity>> {
+        let store = VectorStore::new();
+        let query_vec = store.get_vector(&self.conn, entity_id)?;
+        // request k+1 since the entity itself will appear
+        let results = store.search_vectors(&self.conn, query_vec, k + 1)?;
+
+        let mut out = Vec::new();
+        for r in results {
+            if r.entity_id == entity_id {
+                continue;
+            }
+            let entity = self.get_entity(r.entity_id)?;
+            out.push(SearchResultWithEntity {
+                entity,
+                similarity: r.similarity,
+            });
+        }
+        out.truncate(k);
+        Ok(out)
+    }
+
     /// Find entities related to `entity_id` whose connecting relation weight
     /// is at or above `threshold`.  Depth-1 neighbours only.
     ///
@@ -741,5 +773,44 @@ mod tests {
         let kg = KnowledgeGraph::open_in_memory().unwrap();
         let result = kg.kg_find_related(9999, 0.5);
         assert!(result.is_err(), "non-existent entity should return error");
+    }
+
+    #[test]
+    fn test_similar_entities() {
+        let kg = KnowledgeGraph::open_in_memory().unwrap();
+        let id1 = kg.insert_entity(&graph::Entity::new("paper", "A")).unwrap();
+        let id2 = kg.insert_entity(&graph::Entity::new("paper", "B")).unwrap();
+        let id3 = kg.insert_entity(&graph::Entity::new("paper", "C")).unwrap();
+
+        // A and B are very similar, C is different
+        kg.insert_vector(id1, vec![1.0, 0.0, 0.0, 0.0]).unwrap();
+        kg.insert_vector(id2, vec![0.9, 0.1, 0.0, 0.0]).unwrap();
+        kg.insert_vector(id3, vec![0.0, 0.0, 1.0, 0.0]).unwrap();
+
+        let results = kg.kg_similar_entities(id1, 2).unwrap();
+        assert_eq!(results.len(), 2);
+        // B should be most similar to A
+        assert_eq!(results[0].entity.name, "B");
+        assert!(results[0].similarity > results[1].similarity);
+    }
+
+    #[test]
+    fn test_similar_entities_excludes_self() {
+        let kg = KnowledgeGraph::open_in_memory().unwrap();
+        let id1 = kg.insert_entity(&graph::Entity::new("paper", "X")).unwrap();
+        kg.insert_vector(id1, vec![1.0, 0.0, 0.0]).unwrap();
+
+        let results = kg.kg_similar_entities(id1, 5).unwrap();
+        assert!(results.is_empty(), "self should not appear in results");
+    }
+
+    #[test]
+    fn test_similar_entities_no_vector() {
+        let kg = KnowledgeGraph::open_in_memory().unwrap();
+        let id1 = kg
+            .insert_entity(&graph::Entity::new("paper", "NoVec"))
+            .unwrap();
+        let result = kg.kg_similar_entities(id1, 5);
+        assert!(result.is_err(), "entity without vector should error");
     }
 }
