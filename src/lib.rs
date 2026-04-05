@@ -43,8 +43,14 @@ pub(crate) fn row_get_weight(row: &rusqlite::Row, col: usize) -> rusqlite::Resul
         ValueRef::Blob(b) if b.len() == 8 => {
             let mut bytes = [0u8; 8];
             bytes.copy_from_slice(b);
-            Ok(f64::from_le_bytes(bytes)) // numpy on LE systems (x86/arm64)
+            Ok(f64::from_le_bytes(bytes)) // numpy.float64 on LE systems
         }
+        ValueRef::Blob(b) if b.len() == 4 => {
+            let mut bytes = [0u8; 4];
+            bytes.copy_from_slice(b);
+            Ok(f32::from_le_bytes(bytes) as f64) // numpy.float32 or truncated
+        }
+        ValueRef::Blob(_) => Ok(1.0), // Unknown blob size, use default
         _ => Err(rusqlite::Error::InvalidColumnType(
             col,
             "weight".into(),
