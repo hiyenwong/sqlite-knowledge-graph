@@ -130,9 +130,12 @@ pub fn list_entities(
     let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
 
     let entities = stmt.query_map(params_refs.as_slice(), |row| {
-        let properties_json: String = row.get(3)?;
-        let properties: HashMap<String, serde_json::Value> =
-            serde_json::from_str(&properties_json).unwrap_or_default();
+        // Handle NULL properties column
+        let properties_json: Option<String> = row.get(3)?;
+        let properties: HashMap<String, serde_json::Value> = match properties_json {
+            Some(json) => serde_json::from_str(&json).unwrap_or_default(),
+            None => HashMap::new(),
+        };
 
         Ok(Entity {
             id: Some(row.get(0)?),
