@@ -29,6 +29,13 @@ pub mod rag;
 pub mod schema;
 pub mod vector;
 
+#[cfg(feature = "async")]
+pub mod async_kg;
+#[cfg(feature = "async")]
+pub use async_kg::AsyncKnowledgeGraph;
+#[cfg(feature = "async")]
+pub use async_kg::embed::AsyncEmbeddingGenerator;
+
 /// Read a weight column that may be stored as REAL, INTEGER, NULL, or 8-byte BLOB.
 ///
 /// Python's sqlite3 module stores numpy.float64 as a little-endian IEEE 754
@@ -621,6 +628,14 @@ impl KnowledgeGraph {
     /// ```
     pub fn export_dot(&self, config: &DotConfig) -> Result<String> {
         export::export_dot(&self.conn, config)
+    }
+
+    /// Convert this synchronous `KnowledgeGraph` into an `AsyncKnowledgeGraph`.
+    ///
+    /// Requires the `async` feature to be enabled.
+    #[cfg(feature = "async")]
+    pub fn into_async(self) -> AsyncKnowledgeGraph {
+        AsyncKnowledgeGraph::from_sync(self)
     }
 }
 

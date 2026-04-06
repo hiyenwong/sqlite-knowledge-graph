@@ -30,11 +30,13 @@ rand_distr = "0.4"
 ndarray = "0.15"
 nalgebra = "0.33"
 chrono = "0.4.44"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "process", "io-util"], optional = true }
 
 [dev-dependencies]
 tempfile = "3.10"
 shellexpand = "3.1"
 criterion = "0.5"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "test-util"] }
 
 [[bench]]
 name = "turboquant_bench"
@@ -44,6 +46,8 @@ harness = false
 default = []
 # Enable bundled SQLite (conflicts with sqlite-loadable extension)
 bundled = ["rusqlite/bundled"]
+# Enable async API via tokio (not suitable for cdylib extension use case)
+async = ["dep:tokio"]
 
 [profile.release]
 strip = true

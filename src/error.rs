@@ -47,4 +47,7 @@ pub enum Error {
 
     #[error("Other error: {0}")]
     Other(String),
+
+    #[error("background task failed: {0}")]
+    TaskPanicked(String),
 }
