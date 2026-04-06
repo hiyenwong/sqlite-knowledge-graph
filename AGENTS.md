@@ -27,6 +27,9 @@ algorithms            vector
     (检索增强生成框架)
           ↓
          export
+          ↓
+      async_kg  ← feature = "async"
+  (spawn_blocking 异步包装层)
 ```
 
 详见 [docs/architecture/README.md](docs/architecture/README.md)
@@ -37,10 +40,11 @@ algorithms            vector
 |----|------|----------|------|
 | schema | `src/schema.rs` + `src/migrate.rs` | — | 稳定 |
 | graph | `src/graph/` | [docs/design/graph.md](docs/design/graph.md) | 稳定 |
-| algorithms | `src/algorithms/` | [docs/design/algorithms.md](docs/design/algorithms.md) | P0 Bug |
-| vector | `src/vector/` | [docs/design/vector.md](docs/design/vector.md) | P0 Bug |
-| rag | `src/rag/` | [docs/design/rag.md](docs/design/rag.md) | 空壳 |
+| algorithms | `src/algorithms/` | [docs/design/algorithms.md](docs/design/algorithms.md) | 稳定 |
+| vector | `src/vector/` | [docs/design/vector.md](docs/design/vector.md) | 稳定 |
+| rag | `src/rag/` | [docs/design/rag.md](docs/design/rag.md) | 稳定 |
 | export | `src/export/` | — | 稳定 |
+| async_kg | `src/async_kg/` | — | 稳定（feature = "async"） |
 
 ## Critical Constraints
 
@@ -72,8 +76,10 @@ algorithms            vector
 |--------|------|------|
 | 编译 | `cargo build` | 零错误 |
 | 测试 | `cargo test` | 全通过 |
+| 异步测试 | `cargo test --features async` | 全通过 |
 | 格式 | `cargo fmt -- --check` | 零 diff |
 | Lint | `cargo clippy -- -D warnings` | 零警告 |
+| Async Lint | `cargo clippy --features async -- -D warnings` | 零警告 |
 
 ## Agent Workflow
 

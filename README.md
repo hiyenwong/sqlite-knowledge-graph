@@ -388,6 +388,64 @@ CREATE TABLE kg_hyperedge_entities (
 CREATE INDEX idx_hyperedge_entities_entity ON kg_hyperedge_entities(entity_id);
 ```
 
+## Async API
+
+Requires the `async` feature (opt-in, zero overhead when not enabled):
+
+```toml
+[dependencies]
+sqlite-knowledge-graph = { git = "...", features = ["async"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+```
+
+All blocking SQLite operations are dispatched to `tokio::task::spawn_blocking`, keeping the async executor thread free. The async API mirrors the sync API but takes **owned values** (required for `'static` closures).
+
+```rust
+use sqlite_knowledge_graph::{AsyncKnowledgeGraph, Entity, Relation};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let kg = AsyncKnowledgeGraph::open_in_memory_sync()?;
+
+    // Concurrent inserts
+    let handles: Vec<_> = (0..10).map(|i| {
+        let kg = std::sync::Arc::new(&kg);  // share across tasks
+        tokio::spawn(async move {
+            kg.insert_entity(Entity::new("paper", format!("Paper {i}"))).await
+        })
+    }).collect();
+
+    // CRUD
+    let entity = Entity::new("paper", "Async Paper");
+    let id = kg.insert_entity(entity).await?;
+    let retrieved = kg.get_entity(id).await?;
+
+    // Graph algorithms (CPU-bound, runs off executor)
+    let scores = kg.kg_pagerank(None).await?;
+    let communities = kg.kg_louvain().await?;
+
+    // Vector search
+    let results = kg.kg_semantic_search(query_embedding, 10).await?;
+
+    // Convert existing sync instance
+    let sync_kg = KnowledgeGraph::open("my.db")?;
+    let async_kg = sync_kg.into_async();
+
+    Ok(())
+}
+```
+
+Async embedding generation (non-blocking Python subprocess):
+
+```rust
+use sqlite_knowledge_graph::AsyncEmbeddingGenerator;
+
+let gen = AsyncEmbeddingGenerator::new();
+let embeddings = gen.generate_embeddings(vec!["hello world".into()]).await?;
+```
+
+> **Note**: `AsyncKnowledgeGraph` serialises all operations through a single `Mutex`. For read-heavy concurrent workloads, open multiple instances on the same WAL-mode file.
+
 ## Performance
 
 Benchmarks on a knowledge graph with 2,619 entities and 1.48M relations:
@@ -422,7 +480,7 @@ Benchmarks on a knowledge graph with 2,619 entities and 1.48M relations:
 | **Higher-order Relations (Hyperedge)** | ✅ **Complete (v0.10.0)** |
 | **Paper-driven RAG Engine** | ✅ **Complete (v0.10.1)** |
 | Graph Visualization Export (D3/DOT) | ✅ Complete |
-| Async API | ⏳ Planned |
+| **Async API (tokio)** | ✅ **Complete (v0.11.0)** |
 
 ## Testing
 
@@ -437,7 +495,7 @@ cargo test -- --nocapture
 cargo test test_pagerank
 ```
 
-Current test coverage: **95 unit tests + 2 integration tests passing**
+Current test coverage: **122 unit tests + 14 integration tests passing** (includes 11 async tests)
 
 ## Projects Using This Library
 
