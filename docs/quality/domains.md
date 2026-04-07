@@ -1,17 +1,18 @@
 # Quality Status by Domain
 
-Last updated: 2026-04-02 | Version: v0.10.3
+Last updated: 2026-04-06 | Version: v0.11.0
 
 ## Summary
 
 | 域 | P0 | P1 | P2 | 整体状态 |
 |----|----|----|----|---------|
-| graph | 0 | 0 | 1 | 🟡 P2 待修 |
+| graph | 0 | 0 | 0 | 🟢 稳定 |
 | algorithms | 0 | 0 | 0 | 🟢 稳定 |
 | vector | 0 | 0 | 0 | 🟢 稳定 |
 | rag | 0 | 0 | 0 | 🟢 稳定 |
 | schema | 0 | 0 | 0 | 🟢 稳定 |
 | export | 0 | 0 | 0 | 🟢 稳定 |
+| async_kg | 0 | 0 | 0 | 🟢 稳定（新增 v0.11.0） |
 
 ## P0 — 全部已修复 ✅
 
@@ -46,9 +47,11 @@ Last updated: 2026-04-02 | Version: v0.10.3
 
 所有 P0/P1/P2 问题已全部修复。下一步可考虑：
 - RAG `SubprocessEmbedder` 集成测试（需外部 Python 服务）
+- `AsyncKnowledgeGraph` 并发读写压力测试（多实例 WAL 模式）
 
 ## 已完成优化
 
 - **持久化 TurboQuant 索引** ✅（v0.10.2）：索引序列化存入 `kg_turboquant_cache` 表，以向量数量为版本号，同一 DB 多次 RAG 查询只建一次索引
 - **Schema 自动迁移** ✅（v0.10.3）：`kg_schema_version` 表 + `ensure_schema()` 迁移运行器，支持增量升级（含旧 DB 探测）；`create_schema()` 保持向后兼容
 - **缓存失效策略升级** ✅（v0.10.3）：`kg_turboquant_cache` 新增 `vectors_checksum`（`SUM(entity_id)`），count + checksum 双重校验，防止同等数量但不同向量集导致的缓存误判
+- **Async API** ✅（v0.11.0）：`AsyncKnowledgeGraph`（`Arc<Mutex<KnowledgeGraph>>`）+ `AsyncEmbeddingGenerator`，feature-gated，122 单元测试 + 11 异步集成测试全通过
