@@ -405,11 +405,11 @@ use sqlite_knowledge_graph::{AsyncKnowledgeGraph, Entity, Relation};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let kg = AsyncKnowledgeGraph::open_in_memory_sync()?;
+    let kg = std::sync::Arc::new(AsyncKnowledgeGraph::open_in_memory_sync()?);
 
     // Concurrent inserts
     let handles: Vec<_> = (0..10).map(|i| {
-        let kg = std::sync::Arc::new(&kg);  // share across tasks
+        let kg = std::sync::Arc::clone(&kg);
         tokio::spawn(async move {
             kg.insert_entity(Entity::new("paper", format!("Paper {i}"))).await
         })

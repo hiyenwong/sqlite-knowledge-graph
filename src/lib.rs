@@ -32,9 +32,9 @@ pub mod vector;
 #[cfg(feature = "async")]
 pub mod async_kg;
 #[cfg(feature = "async")]
-pub use async_kg::AsyncKnowledgeGraph;
-#[cfg(feature = "async")]
 pub use async_kg::embed::AsyncEmbeddingGenerator;
+#[cfg(feature = "async")]
+pub use async_kg::AsyncKnowledgeGraph;
 
 /// Read a weight column that may be stored as REAL, INTEGER, NULL, or 8-byte BLOB.
 ///

@@ -340,7 +340,7 @@ mod tests {
     fn test_export_dot_max_nodes() {
         let kg = KnowledgeGraph::open_in_memory().unwrap();
         for i in 0..5 {
-            kg.insert_entity(&Entity::new("concept", &format!("Concept {i}")))
+            kg.insert_entity(&Entity::new("concept", format!("Concept {i}")))
                 .unwrap();
         }
 

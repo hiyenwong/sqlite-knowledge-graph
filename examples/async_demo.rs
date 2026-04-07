@@ -11,8 +11,6 @@
 //! Run with:
 //!   cargo run --example async_demo --features async
 
-#![cfg(feature = "async")]
-
 use std::sync::Arc;
 
 use sqlite_knowledge_graph::{AsyncKnowledgeGraph, Direction, Entity, PageRankConfig, Relation};
@@ -69,7 +67,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ── Step 2: Insert skills sequentially ───────────────────────────────────
     println!("[2] Inserting skills...");
-    let skills = ["NLP", "Computer Vision", "Reinforcement Learning", "Graph ML", "Generative AI"];
+    let skills = [
+        "NLP",
+        "Computer Vision",
+        "Reinforcement Learning",
+        "Graph ML",
+        "Generative AI",
+    ];
     let mut skill_ids = Vec::new();
     for skill in &skills {
         let id = kg.insert_entity(Entity::new("skill", *skill)).await?;
@@ -80,9 +84,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ── Step 3: Build citation graph ─────────────────────────────────────────
     println!("[3] Building citation relations...");
     let citation_pairs = vec![
-        (0, 1), (0, 4), (1, 4), (1, 5), (2, 0), (2, 1), (3, 4),
-        (6, 0), (7, 1), (8, 0), (8, 1), (9, 1), (10, 1), (11, 1),
-        (12, 0), (12, 1), (13, 0), (14, 1), (15, 0), (16, 0),
+        (0, 1),
+        (0, 4),
+        (1, 4),
+        (1, 5),
+        (2, 0),
+        (2, 1),
+        (3, 4),
+        (6, 0),
+        (7, 1),
+        (8, 0),
+        (8, 1),
+        (9, 1),
+        (10, 1),
+        (11, 1),
+        (12, 0),
+        (12, 1),
+        (13, 0),
+        (14, 1),
+        (15, 0),
+        (16, 0),
     ];
 
     for (from, to) in &citation_pairs {
@@ -93,10 +114,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Link papers to skills
     let paper_skill_map = vec![(0, 0), (1, 0), (2, 0), (3, 1), (4, 0), (15, 4), (19, 2)];
     for (paper_idx, skill_idx) in &paper_skill_map {
-        let rel = Relation::new(paper_ids[*paper_idx], skill_ids[*skill_idx], "uses_skill", 0.8)?;
+        let rel = Relation::new(
+            paper_ids[*paper_idx],
+            skill_ids[*skill_idx],
+            "uses_skill",
+            0.8,
+        )?;
         kg.insert_relation(rel).await?;
     }
-    println!("    ✓ {} citation + {} skill relations", citation_pairs.len(), paper_skill_map.len());
+    println!(
+        "    ✓ {} citation + {} skill relations",
+        citation_pairs.len(),
+        paper_skill_map.len()
+    );
 
     // ── Step 4: Store synthetic embeddings ───────────────────────────────────
     println!("[4] Storing synthetic 8-dim embeddings...");
@@ -126,7 +156,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("[5b] Running Louvain community detection...");
     let communities = kg.kg_louvain().await?;
-    println!("    {} communities detected, modularity = {:.4}", communities.num_communities, communities.modularity);
+    println!(
+        "    {} communities detected, modularity = {:.4}",
+        communities.num_communities, communities.modularity
+    );
 
     // ── Step 6: Semantic search ───────────────────────────────────────────────
     println!("[6] Semantic search (query similar to paper index 0)...");
@@ -139,7 +172,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ── Step 7: Graph traversal ───────────────────────────────────────────────
     println!("[7] BFS from '{}' (depth 2)...", paper_titles[2]);
-    let bfs_nodes = kg.kg_bfs_traversal(paper_ids[2], Direction::Outgoing, 2).await?;
+    let bfs_nodes = kg
+        .kg_bfs_traversal(paper_ids[2], Direction::Outgoing, 2)
+        .await?;
     println!("    {} nodes reachable:", bfs_nodes.len());
     for node in bfs_nodes.iter().take(5) {
         let e = kg.get_entity(node.entity_id).await?;
@@ -147,14 +182,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ── Step 8: Shortest path ─────────────────────────────────────────────────
-    println!("[8] Shortest path: '{}' → '{}'", paper_titles[2], paper_titles[4]);
+    println!(
+        "[8] Shortest path: '{}' → '{}'",
+        paper_titles[2], paper_titles[4]
+    );
     match kg.kg_shortest_path(paper_ids[2], paper_ids[4], 5).await? {
         Some(path) => {
-            println!("    Found path ({} hops, total weight = {:.2}):", path.steps.len(), path.total_weight);
+            println!(
+                "    Found path ({} hops, total weight = {:.2}):",
+                path.steps.len(),
+                path.total_weight
+            );
             for step in &path.steps {
                 let from = kg.get_entity(step.from_id).await?;
                 let to = kg.get_entity(step.to_id).await?;
-                println!("      {} --[{}]--> {}", from.name, step.relation_type, to.name);
+                println!(
+                    "      {} --[{}]--> {}",
+                    from.name, step.relation_type, to.name
+                );
             }
         }
         None => println!("    No path found within depth 5"),
@@ -170,9 +215,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\n=== Demo complete ===");
     Ok(())
-}
-
-#[cfg(not(feature = "async"))]
-fn main() {
-    eprintln!("Run with: cargo run --example async_demo --features async");
 }

@@ -42,6 +42,10 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "test-ut
 name = "turboquant_bench"
 harness = false
 
+[[example]]
+name = "async_demo"
+required-features = ["async"]
+
 [features]
 default = []
 # Enable bundled SQLite (conflicts with sqlite-loadable extension)

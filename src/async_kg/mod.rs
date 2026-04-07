@@ -257,7 +257,13 @@ impl AsyncKnowledgeGraph {
         min_arity: Option<usize>,
         max_arity: Option<usize>,
     ) -> Result<Vec<HigherOrderNeighbor>> {
-        dispatch!(self, get_higher_order_neighbors, entity_id, min_arity, max_arity)
+        dispatch!(
+            self,
+            get_higher_order_neighbors,
+            entity_id,
+            min_arity,
+            max_arity
+        )
     }
 
     /// Get all hyperedges an entity participates in.
@@ -367,10 +373,7 @@ impl AsyncKnowledgeGraph {
     // ── Graph algorithms ──────────────────────────────────────────────────
 
     /// PageRank scores for all entities, sorted descending.
-    pub async fn kg_pagerank(
-        &self,
-        config: Option<PageRankConfig>,
-    ) -> Result<Vec<(i64, f64)>> {
+    pub async fn kg_pagerank(&self, config: Option<PageRankConfig>) -> Result<Vec<(i64, f64)>> {
         dispatch!(self, kg_pagerank, config)
     }
 
@@ -401,6 +404,27 @@ impl AsyncKnowledgeGraph {
         dispatch!(self, kg_higher_order_bfs, start_id, max_depth, min_arity)
     }
 
+    /// Hyperedge degree centrality for an entity.
+    pub async fn kg_hyperedge_degree(&self, entity_id: i64) -> Result<f64> {
+        dispatch!(self, kg_hyperedge_degree, entity_id)
+    }
+
+    /// Entity-level hypergraph PageRank using Zhou formula.
+    pub async fn kg_hypergraph_entity_pagerank(
+        &self,
+        damping: Option<f64>,
+        max_iter: Option<usize>,
+        tolerance: Option<f64>,
+    ) -> Result<std::collections::HashMap<i64, f64>> {
+        dispatch!(
+            self,
+            kg_hypergraph_entity_pagerank,
+            damping,
+            max_iter,
+            tolerance
+        )
+    }
+
     /// Shortest path through hyperedges between two entities.
     pub async fn kg_higher_order_shortest_path(
         &self,
@@ -408,7 +432,13 @@ impl AsyncKnowledgeGraph {
         to_id: i64,
         max_depth: u32,
     ) -> Result<Option<HigherOrderPath>> {
-        dispatch!(self, kg_higher_order_shortest_path, from_id, to_id, max_depth)
+        dispatch!(
+            self,
+            kg_higher_order_shortest_path,
+            from_id,
+            to_id,
+            max_depth
+        )
     }
 
     // ── Export ────────────────────────────────────────────────────────────

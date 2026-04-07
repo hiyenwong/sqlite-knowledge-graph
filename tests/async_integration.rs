@@ -38,10 +38,7 @@ async fn test_async_crud_entity() {
     assert_eq!(retrieved.entity_type, "paper");
 
     // List
-    let list = kg
-        .list_entities(Some("paper".into()), None)
-        .await
-        .unwrap();
+    let list = kg.list_entities(Some("paper".into()), None).await.unwrap();
     assert_eq!(list.len(), 1);
 
     // Update
@@ -80,7 +77,10 @@ async fn test_async_insert_relation_and_neighbors() {
 
     // depth-2 from A should reach C as well
     let deep_neighbors = kg.get_neighbors(id_a, 2).await.unwrap();
-    let ids: Vec<i64> = deep_neighbors.iter().map(|n| n.entity.id.unwrap()).collect();
+    let ids: Vec<i64> = deep_neighbors
+        .iter()
+        .map(|n| n.entity.id.unwrap())
+        .collect();
     assert!(ids.contains(&id_b));
     assert!(ids.contains(&id_c));
 }
@@ -270,4 +270,3 @@ async fn test_concurrent_inserts() {
         .unwrap();
     assert_eq!(all.len(), 10);
 }
-

@@ -110,11 +110,30 @@ impl AsyncEmbeddingGenerator {
 
         let total_count = entities.len() as i64;
 
-        // Filter to those that need embeddings
-        let to_process: Vec<_> = if self.skip_existing {
-            // Entities that have no stored vector yet (checked by attempting
-            // search; we use a heuristic — filter by id in a blocking call)
-            entities
+        // Filter to those that need embeddings (skip entities that already have
+        // a non-zero vector stored).
+        let to_process = if self.skip_existing {
+            let mut need_embedding = Vec::new();
+            for entity in entities {
+                if let Some(id) = entity.id {
+                    let has_vector = kg.search_vectors(vec![0.0; 1], 1).await;
+                    // If get_vector fails or returns empty, the entity needs embedding.
+                    // We use a lightweight check via the inner KnowledgeGraph.
+                    let inner = kg.inner();
+                    let skip = {
+                        let kg_lock = inner.lock().map_err(|e| {
+                            crate::error::Error::TaskPanicked(format!("mutex poisoned: {e}"))
+                        })?;
+                        let store = crate::vector::VectorStore::new();
+                        store.get_vector(kg_lock.connection(), id).is_ok()
+                    };
+                    drop(has_vector);
+                    if !skip {
+                        need_embedding.push(entity);
+                    }
+                }
+            }
+            need_embedding
         } else {
             entities
         };
@@ -128,10 +147,7 @@ impl AsyncEmbeddingGenerator {
             });
         }
 
-        let texts: Vec<String> = to_process
-            .iter()
-            .map(|e| e.name.clone())
-            .collect();
+        let texts: Vec<String> = to_process.iter().map(|e| e.name.clone()).collect();
 
         let embeddings = self.generate_embeddings(texts).await?;
 
