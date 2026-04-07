@@ -9,6 +9,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.11.0] - 2026-04-06
+
+### Added
+
+- **Async API** (`src/async_kg/`) - Tokio-based async wrapper, feature-gated behind `features = ["async"]`
+  - `AsyncKnowledgeGraph` - Full async coverage of all `KnowledgeGraph` methods via `spawn_blocking`
+  - `AsyncEmbeddingGenerator` - Non-blocking Python subprocess embedding using `tokio::process::Command`
+  - `KnowledgeGraph::into_async()` - Convenience conversion from sync to async
+  - `dispatch!` macro - Internal boilerplate reducer for spawn_blocking dispatch
+  - `Error::TaskPanicked` - New error variant for async task failures
+- **End-to-end async demo** (`examples/async_demo.rs`)
+  - Concurrent paper ingestion, PageRank, Louvain, semantic search, shortest path
+- **CI async coverage** - Build, test, and clippy with `--features async` in GitHub Actions
+
+### Technical
+
+- Optional dependency: `tokio` (rt, rt-multi-thread, macros, process, io-util)
+- Thread safety: `Arc<Mutex<KnowledgeGraph>>` with `unsafe impl Send/Sync`
+- 122 unit tests + 11 async integration tests + 3 sync integration tests passing
+- Zero overhead for users not enabling the `async` feature
+
+---
+
+## [0.10.3] - 2026-04-02
+
+### Changed
+
+- **Schema auto-migration** - `ensure_schema()` migrator with `kg_schema_version` table
+  - Supports incremental upgrade from any prior version
+  - `create_schema()` remains backward compatible
+- **Cache invalidation upgrade** - `kg_turboquant_cache` adds `vectors_checksum` column (`SUM(entity_id)`)
+  - Dual validation: count + checksum prevents stale cache on same-count different-vector scenarios
+
+### Technical
+
+- Schema version: v2
+- All P0/P1/P2 issues resolved
+
+---
+
 ## [0.10.2] - 2026-04-01
 
 ### Performance
@@ -345,6 +385,8 @@ sqlite-kg search "brain network" --k 5 --db kg.db
 
 | Version | Date | Key Features |
 |---------|------|--------------|
+| 0.11.0 | 2026-04-06 | Async API (tokio spawn_blocking) |
+| 0.10.3 | 2026-04-02 | Schema auto-migration, cache invalidation upgrade |
 | 0.10.2 | 2026-04-01 | Persistent TurboQuant index (SQLite cache) |
 | 0.10.1 | 2026-03-31 | All P0/P1/P2 quality issues resolved |
 | 0.10.0 | 2026-03-31 | Paper-driven two-stage RAG engine |
@@ -360,7 +402,9 @@ sqlite-kg search "brain network" --k 5 --db kg.db
 
 ---
 
-[Unreleased]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.10.2...HEAD
+[Unreleased]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.10.3...v0.11.0
+[0.10.3]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.9.0...v0.10.0
