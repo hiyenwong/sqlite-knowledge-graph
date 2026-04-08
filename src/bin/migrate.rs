@@ -10,7 +10,11 @@ fn main() -> Result<(), Error> {
         std::process::exit(1);
     }
 
-    let command = &args[1];
+    // Support global --db flag before the subcommand:
+    //   sqlite-kg --db foo.db stats
+    // is equivalent to:
+    //   sqlite-kg stats --db foo.db
+    let (command, args) = extract_global_flags(args);
 
     match command.as_str() {
         "migrate" => run_migrate(&args),
@@ -20,12 +24,73 @@ fn main() -> Result<(), Error> {
         "context" => run_context(&args),
         "find-related" => run_find_related(&args),
         "similar" => run_similar(&args),
+        "--help" | "-h" | "help" => {
+            print_usage();
+            Ok(())
+        }
         _ => {
             eprintln!("Unknown command: {}", command);
             print_usage();
             std::process::exit(1);
         }
     }
+}
+
+/// Extract global flags (e.g. `--db <path>`) that appear before the subcommand,
+/// and return the subcommand name plus a rewritten args vec where those flags
+/// are moved after the subcommand so the per-command parsers can handle them.
+fn extract_global_flags(args: Vec<String>) -> (String, Vec<String>) {
+    let mut global_flags: Vec<String> = Vec::new();
+    let mut command: Option<String> = None;
+    let mut i = 1; // skip argv[0]
+
+    // Scan for global flags before the subcommand
+    while i < args.len() {
+        match args[i].as_str() {
+            "--db" => {
+                global_flags.push(args[i].clone());
+                i += 1;
+                if i < args.len() {
+                    global_flags.push(args[i].clone());
+                }
+            }
+            flag if flag.starts_with('-') => {
+                // Other global flags (e.g. --help) treated as the command
+                command = Some(args[i].clone());
+                i += 1;
+                break;
+            }
+            _ => {
+                // First non-flag argument is the subcommand
+                command = Some(args[i].clone());
+                i += 1;
+                break;
+            }
+        }
+        i += 1;
+    }
+
+    let cmd = match command {
+        Some(c) => c,
+        None => {
+            if !global_flags.is_empty() {
+                // Only global flags, no subcommand
+                print_usage();
+                std::process::exit(1);
+            }
+            print_usage();
+            std::process::exit(1);
+        }
+    };
+
+    // Rebuild args: [argv0, command, remaining_args..., global_flags...]
+    let mut new_args = vec![args[0].clone(), cmd.clone()];
+    // Append remaining args after the subcommand
+    new_args.extend_from_slice(&args[i..]);
+    // Append global flags at the end so per-command parsers pick them up
+    new_args.extend(global_flags);
+
+    (cmd, new_args)
 }
 
 fn print_usage() {

@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.11.1] - 2026-04-08
+
+### Fixed
+
+- **CLI: support global `--db` flag before subcommand** — Running `sqlite-kg --db foo.db stats` previously failed with "Unknown command: --db". The CLI now accepts `--db <path>` in any position (before or after the subcommand).
+- **CLI: add `--help` / `-h` / `help` command** — Previously these were unrecognized; now they print usage and exit cleanly.
+
+---
+
 ## [0.11.0] - 2026-04-06
 
 ### Added
