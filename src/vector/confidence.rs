@@ -64,11 +64,11 @@ impl ConfidenceEngine {
 
     /// Recompute live confidence from the entity's stored parameters and log.
     pub fn get_confidence(&self, conn: &Connection, entity_id: i64) -> Result<f64> {
-        let (base, lambda, created_at, access_count) = conn
+        let (base, stored_lambda, created_at, access_count) = conn
             .query_row(
                 "SELECT \
                     COALESCE(base_confidence, 1.0), \
-                    COALESCE(decay_rate, 0.05), \
+                    decay_rate, \
                     COALESCE(created_at, 0), \
                     COALESCE(access_count, 0) \
                  FROM kg_entities WHERE id = ?1",
@@ -76,7 +76,7 @@ impl ConfidenceEngine {
                 |r| {
                     Ok((
                         r.get::<_, f64>(0)?,
-                        r.get::<_, f64>(1)?,
+                        r.get::<_, Option<f64>>(1)?,
                         r.get::<_, i64>(2)?,
                         r.get::<_, i64>(3)?,
                     ))
@@ -86,6 +86,7 @@ impl ConfidenceEngine {
                 rusqlite::Error::QueryReturnedNoRows => Error::EntityNotFound(entity_id),
                 other => Error::SQLite(other),
             })?;
+        let lambda = stored_lambda.unwrap_or(self.params.lambda);
 
         let elapsed_days = (now_unix() - created_at).max(0) as f64 / SECS_PER_DAY;
         let feedback_sum = feedback_sum_for(conn, entity_id)?;
@@ -105,20 +106,32 @@ impl ConfidenceEngine {
         let old_conf = self.get_confidence(conn, entity_id)?;
         let ts = now_unix();
 
-        // Log the raw delta: new_value - old_value == feedback.
-        conn.execute(
+        let tx = conn.unchecked_transaction()?;
+
+        // Insert with raw delta as placeholder so feedback_sum_for picks it up.
+        tx.execute(
             "INSERT INTO kg_confidence_log \
              (entity_id, old_value, new_value, reason, created_at) \
              VALUES (?1, ?2, ?3, 'feedback', ?4)",
             rusqlite::params![entity_id, old_conf, old_conf + feedback, ts],
         )?;
+        let log_rowid = tx.last_insert_rowid();
 
         // Recompute with the newly inserted feedback included.
-        let new_conf = self.get_confidence(conn, entity_id)?;
-        conn.execute(
+        let new_conf = self.get_confidence(&tx, entity_id)?;
+
+        // Correct the log entry to show the actual resulting confidence.
+        tx.execute(
+            "UPDATE kg_confidence_log SET new_value = ?1 WHERE rowid = ?2",
+            rusqlite::params![new_conf, log_rowid],
+        )?;
+
+        tx.execute(
             "UPDATE kg_entities SET confidence = ?1 WHERE id = ?2",
             rusqlite::params![new_conf, entity_id],
         )?;
+
+        tx.commit()?;
 
         debug!(
             entity_id,

@@ -240,6 +240,14 @@ impl KnowledgeGraph {
         store.search_vectors(&self.conn, query, k)
     }
 
+    /// Search using the four-signal SmartVector formula (cosine × temporal × confidence × graph importance).
+    ///
+    /// Weights are configured via [`set_retrieval_weights`](Self::set_retrieval_weights).
+    pub fn smart_search(&self, query: Vec<f32>, k: usize) -> Result<Vec<SmartSearchResult>> {
+        let retrieval = SmartRetrieval::new(self.retrieval_weights.get());
+        retrieval.retrieve(&self.conn, &query, k)
+    }
+
     // ========== TurboQuant Vector Index ==========
 
     /// Create a TurboQuant index for fast approximate nearest neighbor search.

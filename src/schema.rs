@@ -246,9 +246,11 @@ fn migration_v3(conn: &Connection) -> Result<()> {
             old_value  REAL    NOT NULL,
             new_value  REAL    NOT NULL,
             reason     TEXT    NOT NULL,
-            created_at INTEGER DEFAULT (strftime('%s', 'now'))
+            created_at INTEGER DEFAULT (strftime('%s', 'now')),
+            FOREIGN KEY (entity_id) REFERENCES kg_entities(id) ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS idx_conf_log_entity ON kg_confidence_log(entity_id);
+        CREATE INDEX IF NOT EXISTS idx_conf_log_entity_reason ON kg_confidence_log(entity_id, reason);
     "#,
     )?;
     Ok(())

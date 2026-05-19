@@ -6,7 +6,7 @@
 
 use crate::error::{Error, Result};
 use crate::graph::get_entity;
-use crate::vector::confidence::now_unix;
+use crate::vector::confidence::{now_unix, ConfidenceEngine};
 use crate::vector::VectorStore;
 use rusqlite::Connection;
 use std::collections::HashMap;
@@ -95,7 +95,7 @@ impl SmartRetrieval {
             let eid = candidate.entity_id;
             let cosine = candidate.similarity as f64;
             let temporal = temporal_validity(conn, eid, now)?;
-            let conf = cached_confidence(conn, eid)?;
+            let conf = ConfidenceEngine::default().get_confidence(conn, eid)?;
             let importance = if max_indegree > 0 {
                 *indegrees.get(&eid).unwrap_or(&0) as f64 / max_indegree as f64
             } else {
@@ -139,13 +139,25 @@ impl SmartRetrieval {
 // ─────────────────────────────────────────────────────────────────────────────
 
 fn load_indegrees(conn: &Connection, ids: &[i64]) -> Result<HashMap<i64, u32>> {
-    let mut map = HashMap::with_capacity(ids.len());
-    for &id in ids {
-        let count: u32 = conn.query_row(
-            "SELECT COUNT(*) FROM kg_dependencies WHERE target_id = ?1",
-            [id],
-            |r| r.get(0),
-        )?;
+    if ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    // Build a single grouped query instead of one SELECT per id.
+    let placeholders = ids
+        .iter()
+        .enumerate()
+        .map(|(i, _)| format!("?{}", i + 1))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
+        "SELECT target_id, COUNT(*) FROM kg_dependencies WHERE target_id IN ({placeholders}) GROUP BY target_id"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let params = rusqlite::params_from_iter(ids.iter());
+    let mut map: HashMap<i64, u32> = ids.iter().map(|&id| (id, 0)).collect();
+    let rows = stmt.query_map(params, |r| Ok((r.get::<_, i64>(0)?, r.get::<_, u32>(1)?)))?;
+    for row in rows {
+        let (id, count) = row?;
         map.insert(id, count);
     }
     Ok(map)
@@ -176,18 +188,6 @@ fn temporal_validity(conn: &Connection, entity_id: i64, now: i64) -> Result<f64>
         }
     }
     Ok(1.0)
-}
-
-fn cached_confidence(conn: &Connection, entity_id: i64) -> Result<f64> {
-    conn.query_row(
-        "SELECT COALESCE(confidence, 1.0) FROM kg_entities WHERE id = ?1",
-        [entity_id],
-        |r| r.get(0),
-    )
-    .map_err(|e| match e {
-        rusqlite::Error::QueryReturnedNoRows => Error::EntityNotFound(entity_id),
-        other => Error::SQLite(other),
-    })
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -274,9 +274,9 @@ mod tests {
         let _id_a = add_entity_with_vector(&conn, "A", &[1.0, 0.0]);
         let id_b = add_entity_with_vector(&conn, "B", &[0.5, 0.5]);
 
-        // Give B higher confidence
+        // Give B higher base_confidence so the live formula returns a higher score.
         conn.execute(
-            "UPDATE kg_entities SET confidence = 2.0 WHERE id = ?1",
+            "UPDATE kg_entities SET base_confidence = 2.0 WHERE id = ?1",
             [id_b],
         )
         .unwrap();
