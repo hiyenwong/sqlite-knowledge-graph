@@ -1,8 +1,10 @@
 //! Vector module for semantic search with cosine similarity and TurboQuant indexing.
 
+pub mod confidence;
 pub mod store;
 pub mod turboquant;
 
+pub use confidence::{ConfidenceEngine, ConfidenceParams};
 pub use store::{cosine_similarity, SearchResult, VectorStore};
 pub use turboquant::{
     LinearScanIndex, LinearScanStats, TurboQuantConfig, TurboQuantIndex, TurboQuantStats,
