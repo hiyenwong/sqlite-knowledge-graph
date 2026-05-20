@@ -22,9 +22,11 @@
 
 pub mod embedder;
 mod error;
+pub mod smart_retrieval;
 
 pub use embedder::Embedder;
 pub use error::RagError;
+pub use smart_retrieval::{RetrievalWeights, SmartRetrieval, SmartSearchResult};
 
 use crate::error::Result;
 use crate::graph::{get_neighbors, Entity};

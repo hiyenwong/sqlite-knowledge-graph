@@ -16,7 +16,7 @@ use rusqlite::Connection;
 use crate::error::{Error, Result};
 
 /// Latest known schema version.  Bump this whenever a new migration is added.
-const CURRENT_SCHEMA_VERSION: i32 = 2;
+const CURRENT_SCHEMA_VERSION: i32 = 3;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public API
@@ -107,6 +107,7 @@ fn apply_migration(conn: &Connection, version: i32) -> Result<()> {
     match version {
         1 => migration_v1(conn),
         2 => migration_v2(conn),
+        3 => migration_v3(conn),
         _ => Err(Error::Other(format!(
             "Unknown schema migration version: {}",
             version
@@ -206,6 +207,55 @@ fn migration_v2(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Migration v3 — SmartVector: temporal awareness, confidence decay, dependencies.
+///
+/// Adds new columns to `kg_entities` and `kg_relations`, and creates two new
+/// tables (`kg_dependencies`, `kg_confidence_log`) for dependency tracking and
+/// confidence change history.  All changes are non-destructive: existing rows
+/// receive column defaults and are otherwise untouched.
+fn migration_v3(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        r#"
+        ALTER TABLE kg_entities ADD COLUMN confidence      REAL    DEFAULT 1.0;
+        ALTER TABLE kg_entities ADD COLUMN access_count   INTEGER DEFAULT 0;
+        ALTER TABLE kg_entities ADD COLUMN last_accessed  INTEGER;
+        ALTER TABLE kg_entities ADD COLUMN valid_from     INTEGER;
+        ALTER TABLE kg_entities ADD COLUMN valid_until    INTEGER;
+        ALTER TABLE kg_entities ADD COLUMN base_confidence REAL   DEFAULT 1.0;
+        ALTER TABLE kg_entities ADD COLUMN decay_rate     REAL    DEFAULT 0.05;
+
+        ALTER TABLE kg_relations ADD COLUMN confidence  REAL    DEFAULT 1.0;
+        ALTER TABLE kg_relations ADD COLUMN valid_from  INTEGER;
+        ALTER TABLE kg_relations ADD COLUMN valid_until INTEGER;
+
+        CREATE TABLE IF NOT EXISTS kg_dependencies (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_id INTEGER NOT NULL,
+            target_id INTEGER NOT NULL,
+            dep_type  TEXT    NOT NULL,
+            created_at INTEGER DEFAULT (strftime('%s', 'now')),
+            FOREIGN KEY (source_id) REFERENCES kg_entities(id) ON DELETE CASCADE,
+            FOREIGN KEY (target_id) REFERENCES kg_entities(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_deps_source ON kg_dependencies(source_id);
+        CREATE INDEX IF NOT EXISTS idx_deps_target ON kg_dependencies(target_id);
+
+        CREATE TABLE IF NOT EXISTS kg_confidence_log (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            entity_id  INTEGER NOT NULL,
+            old_value  REAL    NOT NULL,
+            new_value  REAL    NOT NULL,
+            reason     TEXT    NOT NULL,
+            created_at INTEGER DEFAULT (strftime('%s', 'now')),
+            FOREIGN KEY (entity_id) REFERENCES kg_entities(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_conf_log_entity ON kg_confidence_log(entity_id);
+        CREATE INDEX IF NOT EXISTS idx_conf_log_entity_reason ON kg_confidence_log(entity_id, reason);
+    "#,
+    )?;
+    Ok(())
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Tests
 // ─────────────────────────────────────────────────────────────────────────────
@@ -268,6 +318,8 @@ mod tests {
             "kg_hyperedge_entities",
             "kg_turboquant_cache",
             "kg_schema_version",
+            "kg_dependencies",
+            "kg_confidence_log",
         ];
 
         for table in &tables {
@@ -280,6 +332,56 @@ mod tests {
                 .unwrap();
             assert_eq!(count, 1, "table {table} should exist");
         }
+    }
+
+    #[test]
+    fn test_v3_entity_columns_exist() {
+        let conn = Connection::open_in_memory().unwrap();
+        ensure_schema(&conn).unwrap();
+
+        // Verify new v3 columns are writable
+        conn.execute(
+            "INSERT INTO kg_entities \
+             (entity_type, name, confidence, access_count, base_confidence, decay_rate) \
+             VALUES ('test', 'T', 0.9, 5, 0.9, 0.05)",
+            [],
+        )
+        .unwrap();
+
+        let (conf, acc): (f64, i64) = conn
+            .query_row(
+                "SELECT confidence, access_count FROM kg_entities WHERE name = 'T'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert!((conf - 0.9).abs() < 1e-9);
+        assert_eq!(acc, 5);
+    }
+
+    #[test]
+    fn test_v3_new_tables_writable() {
+        let conn = Connection::open_in_memory().unwrap();
+        ensure_schema(&conn).unwrap();
+
+        conn.execute(
+            "INSERT INTO kg_entities (entity_type, name) VALUES ('a', 'X')",
+            [],
+        )
+        .unwrap();
+        let id: i64 = conn.last_insert_rowid();
+
+        conn.execute(
+            "INSERT INTO kg_confidence_log (entity_id, old_value, new_value, reason) \
+             VALUES (?1, 1.0, 0.8, 'test')",
+            [id],
+        )
+        .unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM kg_confidence_log", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
     }
 
     #[test]

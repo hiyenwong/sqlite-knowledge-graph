@@ -85,8 +85,10 @@ pub use migrate::{
     build_relationships, migrate_all, migrate_papers, migrate_skills, MigrationStats,
 };
 pub use rag::{embedder::Embedder, embedder::FixedEmbedder, RagConfig, RagEngine, RagResult};
+pub use rag::{RetrievalWeights, SmartRetrieval, SmartSearchResult};
 pub use schema::{create_schema, schema_exists};
 pub use vector::{cosine_similarity, SearchResult, VectorStore};
+pub use vector::{ConfidenceEngine, ConfidenceParams};
 pub use vector::{TurboQuantConfig, TurboQuantIndex, TurboQuantStats};
 
 use rusqlite::Connection;
@@ -115,9 +117,15 @@ pub struct HybridSearchResult {
 }
 
 /// Knowledge Graph Manager - main entry point for the library.
-#[derive(Debug)]
 pub struct KnowledgeGraph {
     conn: Connection,
+    retrieval_weights: std::cell::Cell<RetrievalWeights>,
+}
+
+impl std::fmt::Debug for KnowledgeGraph {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("KnowledgeGraph").finish_non_exhaustive()
+    }
 }
 
 impl KnowledgeGraph {
@@ -136,7 +144,10 @@ impl KnowledgeGraph {
         // Register custom functions
         register_functions(&conn)?;
 
-        Ok(Self { conn })
+        Ok(Self {
+            conn,
+            retrieval_weights: std::cell::Cell::new(RetrievalWeights::default()),
+        })
     }
 
     /// Open an in-memory knowledge graph (useful for testing).
@@ -152,12 +163,25 @@ impl KnowledgeGraph {
         // Register custom functions
         register_functions(&conn)?;
 
-        Ok(Self { conn })
+        Ok(Self {
+            conn,
+            retrieval_weights: std::cell::Cell::new(RetrievalWeights::default()),
+        })
     }
 
     /// Get a reference to the underlying SQLite connection.
     pub fn connection(&self) -> &Connection {
         &self.conn
+    }
+
+    /// Get the current SmartVector retrieval weights.
+    pub fn retrieval_weights(&self) -> RetrievalWeights {
+        self.retrieval_weights.get()
+    }
+
+    /// Set SmartVector retrieval weights.
+    pub fn set_retrieval_weights(&self, weights: RetrievalWeights) {
+        self.retrieval_weights.set(weights);
     }
 
     /// Begin a transaction for batch operations.
@@ -214,6 +238,14 @@ impl KnowledgeGraph {
     pub fn search_vectors(&self, query: Vec<f32>, k: usize) -> Result<Vec<SearchResult>> {
         let store = VectorStore::new();
         store.search_vectors(&self.conn, query, k)
+    }
+
+    /// Search using the four-signal SmartVector formula (cosine × temporal × confidence × graph importance).
+    ///
+    /// Weights are configured via [`set_retrieval_weights`](Self::set_retrieval_weights).
+    pub fn smart_search(&self, query: Vec<f32>, k: usize) -> Result<Vec<SmartSearchResult>> {
+        let retrieval = SmartRetrieval::new(self.retrieval_weights.get());
+        retrieval.retrieve(&self.conn, &query, k)
     }
 
     // ========== TurboQuant Vector Index ==========

@@ -83,9 +83,11 @@ pub fn get_entity(conn: &rusqlite::Connection, id: i64) -> Result<Entity> {
     )?;
 
     let entity = stmt.query_row(params![id], |row| {
-        let properties_json: String = row.get(3)?;
-        let properties: HashMap<String, serde_json::Value> =
-            serde_json::from_str(&properties_json).unwrap_or_default();
+        let properties_json: Option<String> = row.get(3)?;
+        let properties: HashMap<String, serde_json::Value> = match properties_json {
+            Some(json) => serde_json::from_str(&json).unwrap_or_default(),
+            None => HashMap::new(),
+        };
 
         Ok(Entity {
             id: Some(row.get(0)?),
