@@ -6,8 +6,6 @@
 //! it through Tokio's I/O reactor is significantly more efficient than
 //! occupying a blocking thread pool slot.
 
-use std::io;
-
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
@@ -63,9 +61,12 @@ impl AsyncEmbeddingGenerator {
         let texts_json = serde_json::to_string(&texts)
             .map_err(|e| Error::Other(format!("failed to serialize texts: {e}")))?;
 
+        // model_name is passed via env var to avoid interpolating untrusted input
+        // into the Python source string.
         let mut child = Command::new("python3")
             .arg("-c")
             .arg(&python_script)
+            .env("KG_MODEL_NAME", &self.config.model_name)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -77,7 +78,7 @@ impl AsyncEmbeddingGenerator {
             stdin
                 .write_all(texts_json.as_bytes())
                 .await
-                .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::BrokenPipe, e)))?;
+                .map_err(Error::Io)?;
             // Drop stdin to signal EOF to Python
         }
 
@@ -170,29 +171,31 @@ impl AsyncEmbeddingGenerator {
     // ── Private helpers ───────────────────────────────────────────────────
 
     fn build_python_script(&self) -> String {
-        format!(
-            r#"
+        // model_name is injected via the KG_MODEL_NAME env var (set by the caller),
+        // never interpolated directly into the source string.
+        r#"
+import os
 import sys
 import json
 
 try:
     from sentence_transformers import SentenceTransformer
 
-    model = SentenceTransformer('{model}')
+    model_name = os.environ["KG_MODEL_NAME"]
+    model = SentenceTransformer(model_name)
     texts_json = sys.stdin.read()
     texts = json.loads(texts_json)
     embeddings = model.encode(texts, convert_to_numpy=True)
     print(json.dumps(embeddings.tolist()))
 
 except ImportError:
-    print('{{"error": "sentence-transformers not installed. Run: pip install sentence-transformers"}}', file=sys.stderr)
+    print('{"error": "sentence-transformers not installed. Run: pip install sentence-transformers"}', file=sys.stderr)
     sys.exit(1)
 except Exception as e:
-    print(f'{{"error": "{{}}"}}".format(str(e)), file=sys.stderr)
+    print(json.dumps({"error": str(e)}), file=sys.stderr)
     sys.exit(1)
-"#,
-            model = self.config.model_name
-        )
+"#
+        .to_string()
     }
 
     fn parse_embeddings(&self, output: &str) -> Result<Vec<Vec<f32>>> {

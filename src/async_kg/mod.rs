@@ -59,11 +59,10 @@ pub struct AsyncKnowledgeGraph {
     inner: Arc<Mutex<KnowledgeGraph>>,
 }
 
-// The Arc<Mutex<KnowledgeGraph>> can be sent across threads safely.
-// KnowledgeGraph itself is not Send (rusqlite::Connection), but the Mutex
-// wrapper ensures exclusive access.
-unsafe impl Send for AsyncKnowledgeGraph {}
-unsafe impl Sync for AsyncKnowledgeGraph {}
+// Arc<Mutex<KnowledgeGraph>> is Send + Sync automatically:
+// Connection: Send + !Sync, Cell<RetrievalWeights>: Send + !Sync
+// => KnowledgeGraph: Send + !Sync
+// => Arc<Mutex<KnowledgeGraph>>: Send + Sync  (no unsafe needed)
 
 /// Dispatch a method call to a `spawn_blocking` thread.
 ///
