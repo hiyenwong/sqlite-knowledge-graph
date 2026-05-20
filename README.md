@@ -17,6 +17,12 @@ A Rust library for building and querying knowledge graphs using SQLite as the ba
 - **Community Detection**: Louvain algorithm for graph clustering
 - **Connectivity**: Connected components (weak and strong)
 
+### SmartVector ✅ *(v0.12.0)*
+- **Temporal Confidence**: Ebbinghaus forgetting-curve decay per entity (`base·exp(-λt) + access_bonus·ln(1+n) + feedback`)
+- **Four-Signal Retrieval**: cosine similarity × temporal validity × live confidence × graph importance
+- **Ripple Propagation**: BFS confidence penalty propagation along dependency edges (2 hops, 0.5× attenuation)
+- **Audit Log**: Full `kg_confidence_log` history with FK cascade and composite index
+
 ### RAG Integration ✅
 - **Two-Stage Retrieval**: TurboQuant ANN (Stage 1) → exact cosine rerank (Stage 2) — *MemRL*
 - **Graph Expansion**: BFS-based candidate expansion via graph neighbours — *RAPO*
@@ -158,6 +164,11 @@ impl KnowledgeGraph {
     // Vector operations
     pub fn insert_vector(&self, entity_id: i64, vector: Vec<f32>) -> Result<()>
     pub fn search_vectors(&self, query: Vec<f32>, k: usize) -> Result<Vec<SearchResult>>
+
+    // SmartVector four-signal retrieval
+    pub fn smart_search(&self, query: Vec<f32>, k: usize) -> Result<Vec<SmartSearchResult>>
+    pub fn set_retrieval_weights(&self, weights: RetrievalWeights)
+    pub fn retrieval_weights(&self) -> RetrievalWeights
 
     // Legacy RAG helpers (simple, no graph expansion)
     pub fn kg_semantic_search(&self, query_embedding: Vec<f32>, k: usize) -> Result<Vec<SearchResultWithEntity>>
@@ -388,6 +399,79 @@ CREATE TABLE kg_hyperedge_entities (
 CREATE INDEX idx_hyperedge_entities_entity ON kg_hyperedge_entities(entity_id);
 ```
 
+## SmartVector
+
+SmartVector adds temporal awareness and confidence decay to every entity, and replaces pure cosine ranking with a four-signal score. Based on [arXiv:2604.20598](https://arxiv.org/abs/2604.20598).
+
+### Confidence Engine
+
+Each entity has a live confidence value computed by the Ebbinghaus forgetting-curve formula:
+
+```
+confidence(t) = base · exp(-λ · elapsed_days)
+              + access_bonus · ln(1 + access_count)
+              + clamp(feedback_sum, -1, 1)
+```
+
+```rust
+use sqlite_knowledge_graph::{ConfidenceEngine, ConfidenceParams};
+
+let engine = ConfidenceEngine::new(ConfidenceParams {
+    lambda: 0.05,       // decay rate per day
+    access_bonus: 0.1,  // reinforcement per access
+});
+
+// Live confidence (recomputed from formula + feedback log)
+let conf = engine.get_confidence(&conn, entity_id)?;
+
+// Apply explicit feedback and refresh the cache
+let new_conf = engine.update_confidence(&conn, entity_id, -0.2)?;
+```
+
+### Four-Signal Retrieval
+
+`smart_search` re-ranks cosine candidates using four signals with configurable weights:
+
+```rust
+use sqlite_knowledge_graph::{KnowledgeGraph, RetrievalWeights};
+
+let kg = KnowledgeGraph::open("kg.db")?;
+
+// Tune weights (default: w1=0.5, w2=0.2, w3=0.2, w4=0.1)
+kg.set_retrieval_weights(RetrievalWeights {
+    w1: 0.4,  // cosine similarity
+    w2: 0.2,  // temporal validity
+    w3: 0.3,  // live confidence (Ebbinghaus)
+    w4: 0.1,  // graph importance (in-degree)
+});
+
+let results = kg.smart_search(query_vector, 10)?;
+for r in &results {
+    println!(
+        "{} — score={:.3} (cos={:.2}, temporal={:.2}, conf={:.2}, graph={:.2})",
+        r.entity.name, r.final_score,
+        r.cosine_score, r.temporal_score, r.confidence_score, r.graph_importance
+    );
+}
+```
+
+### Ripple Propagation
+
+When an entity becomes stale, its confidence penalty propagates to dependents via BFS (up to 2 hops, 0.5× attenuation per hop):
+
+```rust
+use sqlite_knowledge_graph::rag::{add_dependency, propagate};
+
+// Declare that entity A depends on entity B
+add_dependency(&conn, entity_a, entity_b, "depends_on")?;
+
+// B becomes stale — penalise all dependents
+propagate(&conn, entity_b, 0.4)?;
+// A receives penalty 0.4 × 0.5 = 0.2  →  confidence drops by 0.2
+```
+
+---
+
 ## Async API
 
 Requires the `async` feature (opt-in, zero overhead when not enabled):
@@ -481,6 +565,7 @@ Benchmarks on a knowledge graph with 2,619 entities and 1.48M relations:
 | **Paper-driven RAG Engine** | ✅ **Complete (v0.10.1)** |
 | Graph Visualization Export (D3/DOT) | ✅ Complete |
 | **Async API (tokio)** | ✅ **Complete (v0.11.0)** |
+| **SmartVector (temporal confidence + four-signal retrieval)** | ✅ **Complete (v0.12.0)** |
 
 ## Testing
 
@@ -495,7 +580,7 @@ cargo test -- --nocapture
 cargo test test_pagerank
 ```
 
-Current test coverage: **122 unit tests + 14 integration tests passing** (includes 11 async tests)
+Current test coverage: **133 unit tests + 14 integration tests passing** (includes 11 async tests)
 
 ## Projects Using This Library
 

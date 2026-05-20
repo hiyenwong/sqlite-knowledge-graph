@@ -9,6 +9,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.12.0] - 2026-05-20
+
+### Added
+
+- **SmartVector: self-aware vector embeddings** (`src/vector/confidence.rs`, `src/graph/ripple.rs`, `src/rag/smart_retrieval.rs`) — based on arXiv:2604.20598
+  - `ConfidenceEngine` — Ebbinghaus forgetting-curve formula: `base·exp(-λt) + access_bonus·ln(1+access) + feedback_sum`
+  - `ConfidenceParams` — tuneable λ (decay rate) and access_bonus; `decay_rate` per entity overrides the default
+  - `KnowledgeGraph::smart_search(query, k)` — four-signal retrieval: cosine × temporal × live confidence × graph importance
+  - `KnowledgeGraph::set_retrieval_weights(w)` / `retrieval_weights()` — configure blending weights at runtime
+  - `SmartRetrieval` / `RetrievalWeights` / `SmartSearchResult` — public types for direct use
+  - `ripple::propagate(conn, origin_id, base_penalty)` — BFS confidence penalty propagation up to 2 hops with 0.5× attenuation per hop
+  - `ripple::add_dependency(conn, source_id, target_id, dep_type)` — explicit entity dependency edges
+
+- **Schema migration v3** — non-destructive, all new columns have defaults
+  - `kg_entities`: `confidence`, `access_count`, `last_accessed`, `valid_from`, `valid_until`, `base_confidence`, `decay_rate`
+  - `kg_relations`: `confidence`, `valid_from`, `valid_until`
+  - `kg_dependencies` table — dependency edge graph with FK cascades
+  - `kg_confidence_log` table — full audit trail of confidence changes with FK cascade and composite index `(entity_id, reason)`
+
+### Fixed
+
+- **`ConfidenceParams.lambda` now used as fallback** — `get_confidence` previously hard-coded `0.05` via SQL `COALESCE`; it now uses `self.params.lambda` when `decay_rate IS NULL`
+- **`update_confidence` log accuracy** — `kg_confidence_log.new_value` now records the actual recomputed confidence rather than the raw `old_conf + feedback`, which diverges when the feedback sum hits the `[-1, 1]` clamp
+- **`update_confidence` atomicity** — INSERT log + UPDATE entity now execute inside a single transaction
+- **`apply_penalty` confidence floor** — result is clamped to `[0.0, 1.0]` so confidence can never go negative
+- **`load_indegrees` N+1 queries** — replaced per-entity `SELECT COUNT(*)` loop with a single `GROUP BY` query
+- **`retrieve` uses live confidence** — replaced stale `cached_confidence` column read with `ConfidenceEngine::get_confidence` so the w3 signal reflects decay and feedback
+- **Async API: remove redundant `unsafe impl Send/Sync`** — `Arc<Mutex<KnowledgeGraph>>` derives `Send + Sync` automatically; the explicit `unsafe impl` blocks were unnecessary and masked potential future regressions
+- **Async API: Python code injection** — `AsyncEmbeddingGenerator` now passes `model_name` via the `KG_MODEL_NAME` environment variable instead of interpolating it directly into the Python source string
+- **Async API: `BrokenPipe` error wrapping** — stdin `write_all` errors are now propagated directly via `From<std::io::Error>` instead of being wrapped and losing the original error context
+
+### Technical
+
+- Schema version: v3
+- 133 unit tests passing
+
+---
+
 ## [0.11.1] - 2026-04-08
 
 ### Fixed
@@ -394,6 +432,7 @@ sqlite-kg search "brain network" --k 5 --db kg.db
 
 | Version | Date | Key Features |
 |---------|------|--------------|
+| 0.12.0 | 2026-05-20 | SmartVector: temporal confidence, four-signal retrieval, ripple propagation |
 | 0.11.0 | 2026-04-06 | Async API (tokio spawn_blocking) |
 | 0.10.3 | 2026-04-02 | Schema auto-migration, cache invalidation upgrade |
 | 0.10.2 | 2026-04-01 | Persistent TurboQuant index (SQLite cache) |
@@ -411,7 +450,8 @@ sqlite-kg search "brain network" --k 5 --db kg.db
 
 ---
 
-[Unreleased]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.11.1...v0.12.0
 [0.11.0]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.10.3...v0.11.0
 [0.10.3]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.10.1...v0.10.2
