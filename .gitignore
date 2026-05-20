@@ -18,3 +18,6 @@ Thumbs.db
 # Planning docs (local only)
 /docs/
 /.ai/
+
+# Claude Code local config
+.claude/
