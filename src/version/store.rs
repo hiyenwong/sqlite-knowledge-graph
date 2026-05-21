@@ -81,7 +81,9 @@ fn clear_bit(conn: &rusqlite::Connection, table: &str, bit: i64) -> Result<()> {
 }
 
 /// Resolve a version id to its validity bitmask (`1 << bit_slot`).
-/// Returns [`Error::VersionNotFound`] if the version does not exist.
+///
+/// Returns [`Error::VersionNotFound`] if the version does not exist, or
+/// [`Error::CorruptBitSlot`] if the stored `bit_slot` is outside `[0, 63]`.
 pub fn version_bit_for(conn: &rusqlite::Connection, version_id: i64) -> Result<i64> {
     let slot: i64 = conn
         .query_row(
@@ -91,12 +93,9 @@ pub fn version_bit_for(conn: &rusqlite::Connection, version_id: i64) -> Result<i
         )
         .optional()?
         .ok_or(Error::VersionNotFound(version_id))?;
-    // Guard against a corrupted/manual DB row: `bit_from_slot` shifts by `slot`,
-    // which panics for out-of-range values. Return an error instead.
-    if !(0..MAX_VERSIONS).contains(&slot) {
-        return Err(Error::CorruptBitSlot { version_id, slot });
-    }
-    Ok(bit_from_slot(slot))
+    // A corrupted/manual DB row could carry an out-of-range slot; surface it as
+    // an error instead of panicking on the shift inside `bit_from_slot`.
+    bit_from_slot(slot).ok_or(Error::CorruptBitSlot { version_id, slot })
 }
 
 /// Return every version whose `bit_slot` is set in `bits`, newest first.
@@ -356,11 +355,14 @@ mod tests {
 
         // Simulate a corrupted/manual row by bypassing the CHECK constraint so the
         // out-of-range slot reaches the read path instead of being rejected at write.
-        conn.execute_batch("PRAGMA ignore_check_constraints = ON").unwrap();
+        conn.execute_batch("PRAGMA ignore_check_constraints = ON")
+            .unwrap();
         conn.execute("UPDATE kg_versions SET bit_slot = 64 WHERE id = ?1", [id])
             .unwrap();
 
         let err = version_bit_for(&conn, id).unwrap_err();
-        assert!(matches!(err, Error::CorruptBitSlot { version_id, slot } if version_id == id && slot == 64));
+        assert!(
+            matches!(err, Error::CorruptBitSlot { version_id, slot } if version_id == id && slot == 64)
+        );
     }
 }

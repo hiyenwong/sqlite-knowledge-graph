@@ -81,11 +81,7 @@ fn partition(ids1: &[i64], ids2: &[i64]) -> (Vec<i64>, Vec<i64>, Vec<i64>) {
 }
 
 fn load_entities(conn: &rusqlite::Connection, ids: &[i64]) -> Result<Vec<Entity>> {
-    let mut result = Vec::new();
-    for &id in ids {
-        result.push(crate::graph::entity::get_entity(conn, id)?);
-    }
-    Ok(result)
+    crate::graph::entity::get_entities_by_ids(conn, ids)
 }
 
 fn load_relations(conn: &rusqlite::Connection, ids: &[i64]) -> Result<Vec<Relation>> {

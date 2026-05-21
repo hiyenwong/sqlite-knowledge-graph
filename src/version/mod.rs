@@ -51,15 +51,20 @@ pub enum MergeStrategy {
 /// signed 64-bit `validity` column.
 pub(crate) const MAX_VERSIONS: i64 = 64;
 
-/// Compute the validity bitmask for a `bit_slot` in `[0, 63]`.
+/// Compute the validity bitmask for a `bit_slot`, or `None` if `slot` is outside
+/// `[0, 63]`.
 ///
 /// Slots — not version ids — drive the bit position so the limit is exactly 64
 /// *concurrent* versions (slots are reclaimed on delete) instead of 64 version
-/// *creations* over the database lifetime.  Callers obtain a version's slot via
-/// [`store::version_bit_for`], which validates existence; this helper only does
-/// the shift and assumes a validated slot.
+/// *creations* over the database lifetime.  Returning `None` for an out-of-range
+/// slot keeps the helper panic-free even in release builds: a corrupted/manual
+/// DB row is surfaced as a regular error by the caller (see
+/// [`store::version_bit_for`]) instead of crashing on `1 << slot`.
 #[inline]
-pub(crate) fn bit_from_slot(slot: i64) -> i64 {
-    debug_assert!((0..MAX_VERSIONS).contains(&slot), "bit_slot out of range");
-    1 << slot
+pub(crate) fn bit_from_slot(slot: i64) -> Option<i64> {
+    if (0..MAX_VERSIONS).contains(&slot) {
+        Some(1 << slot)
+    } else {
+        None
+    }
 }

@@ -82,24 +82,55 @@ pub fn get_entity(conn: &rusqlite::Connection, id: i64) -> Result<Entity> {
         "#,
     )?;
 
-    let entity = stmt.query_row(params![id], |row| {
-        let properties_json: Option<String> = row.get(3)?;
-        let properties: HashMap<String, serde_json::Value> = match properties_json {
-            Some(json) => serde_json::from_str(&json).unwrap_or_default(),
-            None => HashMap::new(),
-        };
-
-        Ok(Entity {
-            id: Some(row.get(0)?),
-            entity_type: row.get(1)?,
-            name: row.get(2)?,
-            properties,
-            created_at: row.get(4)?,
-            updated_at: row.get(5)?,
-        })
-    })?;
-
+    let entity = stmt.query_row(params![id], row_to_entity)?;
     Ok(entity)
+}
+
+/// Map a `kg_entities` row (id, entity_type, name, properties, created_at,
+/// updated_at) to an [`Entity`]. Shared by all entity read paths.
+fn row_to_entity(row: &rusqlite::Row) -> rusqlite::Result<Entity> {
+    let properties_json: Option<String> = row.get(3)?;
+    let properties: HashMap<String, serde_json::Value> = match properties_json {
+        Some(json) => serde_json::from_str(&json).unwrap_or_default(),
+        None => HashMap::new(),
+    };
+
+    Ok(Entity {
+        id: Some(row.get(0)?),
+        entity_type: row.get(1)?,
+        name: row.get(2)?,
+        properties,
+        created_at: row.get(4)?,
+        updated_at: row.get(5)?,
+    })
+}
+
+/// Load multiple entities by ID, batching into `IN (...)` queries to avoid the
+/// N+1 pattern of one query per id. Ids are queried in chunks to stay under
+/// SQLite's bound-parameter limit; missing ids are simply absent from the
+/// result, and order is not guaranteed.
+pub(crate) fn get_entities_by_ids(conn: &rusqlite::Connection, ids: &[i64]) -> Result<Vec<Entity>> {
+    // SQLite's default SQLITE_MAX_VARIABLE_NUMBER is 999 on older builds; stay
+    // comfortably below it.
+    const CHUNK: usize = 900;
+
+    let mut result = Vec::with_capacity(ids.len());
+    for chunk in ids.chunks(CHUNK) {
+        let placeholders = std::iter::repeat("?")
+            .take(chunk.len())
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT id, entity_type, name, properties, created_at, updated_at \
+             FROM kg_entities WHERE id IN ({placeholders})"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(rusqlite::params_from_iter(chunk.iter()), row_to_entity)?;
+        for row in rows {
+            result.push(row?);
+        }
+    }
+    Ok(result)
 }
 
 /// List entities with optional filtering.
@@ -131,23 +162,7 @@ pub fn list_entities(
     // Convert boxed params to references for query_map
     let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
 
-    let entities = stmt.query_map(params_refs.as_slice(), |row| {
-        // Handle NULL properties column
-        let properties_json: Option<String> = row.get(3)?;
-        let properties: HashMap<String, serde_json::Value> = match properties_json {
-            Some(json) => serde_json::from_str(&json).unwrap_or_default(),
-            None => HashMap::new(),
-        };
-
-        Ok(Entity {
-            id: Some(row.get(0)?),
-            entity_type: row.get(1)?,
-            name: row.get(2)?,
-            properties,
-            created_at: row.get(4)?,
-            updated_at: row.get(5)?,
-        })
-    })?;
+    let entities = stmt.query_map(params_refs.as_slice(), row_to_entity)?;
 
     let mut result = Vec::new();
     for entity in entities {
@@ -243,6 +258,32 @@ mod tests {
 
         let all = list_entities(&conn, None, Some(2)).unwrap();
         assert_eq!(all.len(), 2);
+    }
+
+    #[test]
+    fn test_get_entities_by_ids_batches_and_skips_missing() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::schema::create_schema(&conn).unwrap();
+
+        let id1 = insert_entity(&conn, &Entity::new("paper", "Paper 1")).unwrap();
+        let id2 = insert_entity(&conn, &Entity::new("paper", "Paper 2")).unwrap();
+
+        // Request both real ids plus a non-existent one; missing ids are skipped.
+        let loaded = get_entities_by_ids(&conn, &[id1, 99999, id2]).unwrap();
+        assert_eq!(loaded.len(), 2);
+        let names: std::collections::HashSet<&str> =
+            loaded.iter().map(|e| e.name.as_str()).collect();
+        assert!(names.contains("Paper 1"));
+        assert!(names.contains("Paper 2"));
+    }
+
+    #[test]
+    fn test_get_entities_by_ids_empty() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::schema::create_schema(&conn).unwrap();
+
+        let loaded = get_entities_by_ids(&conn, &[]).unwrap();
+        assert!(loaded.is_empty());
     }
 
     #[test]
