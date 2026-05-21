@@ -1,8 +1,11 @@
 //! QuaQue-inspired versioning for the knowledge graph.
 //!
 //! Based on arXiv:2603.18654 — condensed relational model using bitstring validity.
-//! Each entity/relation row carries a `validity` bitstring where bit N = 1 means
-//! the row exists in version N+1.  Version filtering uses bitwise operations.
+//! Each entity/relation row carries a `validity` bitstring; bit position is determined
+//! by a version's `bit_slot` (0–63), NOT by its `id`.  Slots are reclaimable: when a
+//! version is deleted its slot is freed and the next `create_version` call reuses the
+//! lowest available slot.  A row belongs to version V when
+//! `(validity & (1 << V.bit_slot)) != 0`.  Version filtering uses bitwise operations.
 
 pub mod diff;
 pub mod merge;
