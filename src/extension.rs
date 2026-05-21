@@ -7,6 +7,13 @@ use sqlite_loadable::{
 };
 use std::ffi::CString;
 
+/// Helper function to return an integer result
+fn result_int64(context: *mut sqlite3_context, value: i64) {
+    unsafe {
+        sqlite_loadable::ext::sqlite3ext_result_int64(context, value);
+    }
+}
+
 /// Helper function to return text result
 fn result_text(context: *mut sqlite3_context, text: &str) {
     let cstr = CString::new(text).unwrap();
@@ -157,6 +164,23 @@ pub fn kg_connected_components(
     Ok(())
 }
 
+/// kg_bit_count() - Population count of a version validity bitstring
+/// Parameter: x (INTEGER, NULL treated as 0)
+/// Returns the number of set bits (how many versions a row belongs to)
+pub fn kg_bit_count(
+    context: *mut sqlite3_context,
+    values: &[*mut sqlite3_value],
+) -> Result<(), Error> {
+    if values.is_empty() {
+        return Err(Error::new_message("kg_bit_count requires 1 argument"));
+    }
+    // A SQL NULL reads back as 0 here, which has zero set bits — matching the
+    // rusqlite registration's NULL → 0 behavior in src/functions.rs.
+    let val = unsafe { sqlite_loadable::ext::sqlite3ext_value_int64(values[0]) };
+    result_int64(context, val.count_ones() as i64);
+    Ok(())
+}
+
 /// Register functions
 fn register_extension_functions(db: *mut sqlite3) -> Result<(), Error> {
     let flags = FunctionFlags::UTF8 | FunctionFlags::DETERMINISTIC;
@@ -164,6 +188,9 @@ fn register_extension_functions(db: *mut sqlite3) -> Result<(), Error> {
     // Basic info functions
     define_scalar_function(db, "kg_version", 0, kg_version, flags)?;
     define_scalar_function(db, "kg_stats", 0, kg_stats, flags)?;
+
+    // Version bitstring helper (QuaQue versioning)
+    define_scalar_function(db, "kg_bit_count", 1, kg_bit_count, flags)?;
 
     // Graph algorithm functions with optional parameters
     define_scalar_function(db, "kg_pagerank", 0, kg_pagerank, flags)?;

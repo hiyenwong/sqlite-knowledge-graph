@@ -36,6 +36,21 @@ pub enum Error {
     #[error("Hyperedge not found: {0}")]
     HyperedgeNotFound(i64),
 
+    #[error("Version not found: {0}")]
+    VersionNotFound(i64),
+
+    #[error("Duplicate version name: {0}")]
+    DuplicateVersionName(String),
+
+    #[error("Invalid merge: {0}")]
+    InvalidMerge(String),
+
+    #[error("Version limit exceeded: all 64 version slots are in use")]
+    VersionLimitExceeded,
+
+    #[error("Corrupt version data: version {version_id} has out-of-range bit_slot {slot} (expected 0..=63)")]
+    CorruptBitSlot { version_id: i64, slot: i64 },
+
     #[error("Invalid entity type: {0}")]
     InvalidEntityType(String),
 

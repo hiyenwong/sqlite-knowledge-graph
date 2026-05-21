@@ -59,6 +59,20 @@ pub fn register_functions(conn: &rusqlite::Connection) -> Result<()> {
         },
     )?;
 
+    // Register kg_bit_count — population count for version validity bitstrings.
+    conn.create_scalar_function(
+        "kg_bit_count",
+        1,
+        rusqlite::functions::FunctionFlags::SQLITE_UTF8,
+        |ctx| {
+            let val: Option<i64> = ctx.get(0)?;
+            match val {
+                Some(x) => Ok(x.count_ones() as i64),
+                None => Ok(0),
+            }
+        },
+    )?;
+
     Ok(())
 }
 
@@ -90,5 +104,41 @@ mod tests {
             )
             .unwrap();
         assert!((sim - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_kg_bit_count_positive() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::schema::create_schema(&conn).unwrap();
+        register_functions(&conn).unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT kg_bit_count(7)", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 3); // 0b111
+    }
+
+    #[test]
+    fn test_kg_bit_count_zero() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::schema::create_schema(&conn).unwrap();
+        register_functions(&conn).unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT kg_bit_count(0)", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn test_kg_bit_count_null() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::schema::create_schema(&conn).unwrap();
+        register_functions(&conn).unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT kg_bit_count(NULL)", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
     }
 }
