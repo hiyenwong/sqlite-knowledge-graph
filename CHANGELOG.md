@@ -9,6 +9,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.13.0] - 2026-05-21
+
+### Added
+
+- **QuaQue versioning** (`src/version/`) — based on arXiv:2603.18654
+  - Bitstring validity model: each entity/relation row carries a `validity` INTEGER; membership test is `(validity & (1 << bit_slot)) != 0`
+  - Up to 64 concurrent named versions via reclaimable `bit_slot` allocation (slots freed on delete, lowest free slot always reused)
+  - `create_version` / `delete_version` / `get_version` / `list_versions` — version CRUD
+  - `version_add_entity` / `version_remove_entity` / `version_add_relation` / `version_remove_relation` — snapshot membership management
+  - `version_snapshot_entities` / `version_snapshot_relations` — bulk snapshot of all current rows into a version
+  - `version_entities` / `version_relations` / `version_neighbors` — version-filtered queries with optional pagination
+  - `version_compare` — diff two versions: returns `VersionDiff` with added/removed/common entities and relations
+  - `version_entity_history` — all versions a given entity belongs to (newest first)
+  - `version_merge` — merge one or more source versions into a new target version with Union or Intersection strategy
+  - `Version`, `VersionDiff`, `MergeStrategy` public types
+- **Schema migration v4** — non-destructive; adds `kg_versions` table and `validity` column to `kg_entities` / `kg_relations`
+  - `kg_versions.bit_slot CHECK (bit_slot BETWEEN 0 AND 63)` — DB-level guard against out-of-range slot values
+
+### Fixed
+
+- `bit_from_slot` now returns `Option<i64>` — previously relied on `debug_assert!` (omitted in release builds); out-of-range slots now surface as `Error::CorruptBitSlot` instead of panicking on `1 << slot`
+- `create_version` detects duplicate names via structured `rusqlite::Error::SqliteFailure` extended error code + `table.column` identifier instead of brittle English message substring matching
+- `load_relations` diff reuses a single prepared statement across all IDs (eliminated per-iteration SQL recompile)
+- `load_entities` diff batches via `WHERE id IN (...)` queries (chunked at 900 IDs, removes N+1 pattern)
+- `get_version` doc comment corrected: function returns `Error::VersionNotFound`, not `None`
+
+### Technical
+
+- Schema version: v4
+- 177 unit tests passing
+
+---
+
 ## [0.12.0] - 2026-05-20
 
 ### Added
@@ -432,6 +465,7 @@ sqlite-kg search "brain network" --k 5 --db kg.db
 
 | Version | Date | Key Features |
 |---------|------|--------------|
+| 0.13.0 | 2026-05-21 | QuaQue bitstring versioning, version diff/merge, schema v4 |
 | 0.12.0 | 2026-05-20 | SmartVector: temporal confidence, four-signal retrieval, ripple propagation |
 | 0.11.0 | 2026-04-06 | Async API (tokio spawn_blocking) |
 | 0.10.3 | 2026-04-02 | Schema auto-migration, cache invalidation upgrade |
@@ -450,7 +484,8 @@ sqlite-kg search "brain network" --k 5 --db kg.db
 
 ---
 
-[Unreleased]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.11.1...v0.12.0
 [0.11.0]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.10.3...v0.11.0
 [0.10.3]: https://github.com/hiyenwong/sqlite-knowledge-graph/compare/v0.10.2...v0.10.3

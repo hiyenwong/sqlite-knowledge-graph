@@ -23,6 +23,16 @@ A Rust library for building and querying knowledge graphs using SQLite as the ba
 - **Ripple Propagation**: BFS confidence penalty propagation along dependency edges (2 hops, 0.5× attenuation)
 - **Audit Log**: Full `kg_confidence_log` history with FK cascade and composite index
 
+### QuaQue Versioning ✅ *(v0.13.0)*
+- **Bitstring validity model**: each entity/relation row carries a `validity` INTEGER column; `(validity & (1 << bit_slot)) != 0` determines membership — based on arXiv:2603.18654
+- **64 concurrent named versions**: reclaimable `bit_slot` allocation (slots freed on delete, lowest free slot reused)
+- **Version CRUD**: `create_version`, `delete_version`, `get_version`, `list_versions`
+- **Snapshot management**: add/remove individual entities and relations, or bulk-snapshot all current rows
+- **Version-filtered queries**: `version_entities`, `version_relations`, `version_neighbors`
+- **Diff**: `version_compare` returns added/removed/common entities and relations between two versions
+- **History**: `version_entity_history` — all versions a given entity belongs to
+- **Merge**: `version_merge` with Union or Intersection strategy
+
 ### RAG Integration ✅
 - **Two-Stage Retrieval**: TurboQuant ANN (Stage 1) → exact cosine rerank (Stage 2) — *MemRL*
 - **Graph Expansion**: BFS-based candidate expansion via graph neighbours — *RAPO*
@@ -169,6 +179,12 @@ impl KnowledgeGraph {
     pub fn smart_search(&self, query: Vec<f32>, k: usize) -> Result<Vec<SmartSearchResult>>
     pub fn set_retrieval_weights(&self, weights: RetrievalWeights)
     pub fn retrieval_weights(&self) -> RetrievalWeights
+
+    // QuaQue versioning
+    pub fn version_create(&self, name: &str, branch: &str) -> Result<i64>       // via version::store
+    pub fn version_add_entity(&self, version_id: i64, entity_id: i64) -> Result<()>
+    pub fn version_compare(&self, v1_id: i64, v2_id: i64) -> Result<VersionDiff>
+    pub fn version_merge(&self, source_ids: &[i64], name: &str, strategy: MergeStrategy) -> Result<i64>
 
     // Legacy RAG helpers (simple, no graph expansion)
     pub fn kg_semantic_search(&self, query_embedding: Vec<f32>, k: usize) -> Result<Vec<SearchResultWithEntity>>
