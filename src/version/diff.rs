@@ -89,12 +89,12 @@ fn load_entities(conn: &rusqlite::Connection, ids: &[i64]) -> Result<Vec<Entity>
 }
 
 fn load_relations(conn: &rusqlite::Connection, ids: &[i64]) -> Result<Vec<Relation>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, source_id, target_id, rel_type, weight, properties, created_at \
+         FROM kg_relations WHERE id = ?1",
+    )?;
     let mut result = Vec::new();
     for &id in ids {
-        let mut stmt = conn.prepare(
-            "SELECT id, source_id, target_id, rel_type, weight, properties, created_at \
-             FROM kg_relations WHERE id = ?1",
-        )?;
         let rel = stmt.query_row([id], |row| {
             let props_json: Option<String> = row.get(5)?;
             let properties = props_json
