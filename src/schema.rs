@@ -282,7 +282,7 @@ fn migration_v4(conn: &Connection) -> Result<()> {
             description TEXT,
             created_at  INTEGER DEFAULT (strftime('%s', 'now')),
             is_merged   INTEGER NOT NULL DEFAULT 0,
-            bit_slot    INTEGER NOT NULL UNIQUE
+            bit_slot    INTEGER NOT NULL UNIQUE CHECK (bit_slot BETWEEN 0 AND 63)
         );
 
         CREATE INDEX IF NOT EXISTS idx_versions_branch ON kg_versions(branch);

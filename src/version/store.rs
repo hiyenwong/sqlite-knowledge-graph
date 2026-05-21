@@ -87,6 +87,11 @@ pub fn version_bit_for(conn: &rusqlite::Connection, version_id: i64) -> Result<i
         )
         .optional()?
         .ok_or(Error::VersionNotFound(version_id))?;
+    // Guard against a corrupted/manual DB row: `bit_from_slot` shifts by `slot`,
+    // which panics for out-of-range values. Return an error instead.
+    if !(0..MAX_VERSIONS).contains(&slot) {
+        return Err(Error::CorruptBitSlot { version_id, slot });
+    }
     Ok(bit_from_slot(slot))
 }
 
@@ -338,5 +343,20 @@ mod tests {
         let conn = setup();
         let err = version_bit_for(&conn, 999).unwrap_err();
         assert!(matches!(err, Error::VersionNotFound(999)));
+    }
+
+    #[test]
+    fn test_version_bit_for_corrupt_slot_errors() {
+        let conn = setup();
+        let id = create_version(&conn, "v1", "main", None, None).unwrap();
+
+        // Simulate a corrupted/manual row by bypassing the CHECK constraint so the
+        // out-of-range slot reaches the read path instead of being rejected at write.
+        conn.execute_batch("PRAGMA ignore_check_constraints = ON").unwrap();
+        conn.execute("UPDATE kg_versions SET bit_slot = 64 WHERE id = ?1", [id])
+            .unwrap();
+
+        let err = version_bit_for(&conn, id).unwrap_err();
+        assert!(matches!(err, Error::CorruptBitSlot { version_id, slot } if version_id == id && slot == 64));
     }
 }
