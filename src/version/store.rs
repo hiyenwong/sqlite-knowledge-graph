@@ -1,6 +1,6 @@
 //! Version CRUD operations.
 
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{ffi, params, OptionalExtension};
 
 use super::{bit_from_slot, Version, MAX_VERSIONS};
 use crate::error::{Error, Result};
@@ -23,14 +23,18 @@ pub fn create_version(
          VALUES (?1, ?2, ?3, ?4, ?5)",
         params![name, branch, parent_id, description, slot],
     )
-    .map_err(|e| {
-        if e.to_string()
-            .contains("UNIQUE constraint failed: kg_versions.name")
+    .map_err(|e| match e {
+        // Map the name UNIQUE violation to a typed error. Match the structured
+        // extended code rather than the English message text (which varies by
+        // SQLite/rusqlite version and locale); the `table.column` identifier is
+        // SQLite-generated and distinguishes it from the bit_slot UNIQUE column.
+        rusqlite::Error::SqliteFailure(err, Some(msg))
+            if err.extended_code == ffi::SQLITE_CONSTRAINT_UNIQUE
+                && msg.contains("kg_versions.name") =>
         {
             Error::DuplicateVersionName(name.to_string())
-        } else {
-            Error::from(e)
         }
+        other => Error::from(other),
     })?;
     Ok(conn.last_insert_rowid())
 }
