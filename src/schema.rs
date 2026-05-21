@@ -10,13 +10,15 @@
 //! |---------|---------|
 //! | 1       | Initial schema: entities, relations, vectors, hyperedges, turboquant cache |
 //! | 2       | Add `vectors_checksum` column to `kg_turboquant_cache` |
+//! | 3       | SmartVector: temporal awareness, confidence decay, dependencies |
+//! | 4       | QuaQue versioning: `kg_versions` table, `validity` columns on entities/relations |
 
 use rusqlite::Connection;
 
 use crate::error::{Error, Result};
 
 /// Latest known schema version.  Bump this whenever a new migration is added.
-const CURRENT_SCHEMA_VERSION: i32 = 3;
+const CURRENT_SCHEMA_VERSION: i32 = 4;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public API
@@ -108,6 +110,7 @@ fn apply_migration(conn: &Connection, version: i32) -> Result<()> {
         1 => migration_v1(conn),
         2 => migration_v2(conn),
         3 => migration_v3(conn),
+        4 => migration_v4(conn),
         _ => Err(Error::Other(format!(
             "Unknown schema migration version: {}",
             version
@@ -256,6 +259,42 @@ fn migration_v3(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Migration v4 — QuaQue versioning: versions table and validity columns.
+///
+/// Adds a `kg_versions` table for version metadata and a `validity` bitstring
+/// column to `kg_entities` and `kg_relations`.  NULL validity means "unversioned,
+/// visible in all queries".  Non-NULL bitstring tracks which versions the row
+/// belongs to.
+///
+/// Each version owns a `bit_slot` in `[0, 63]` (the bit position it occupies in
+/// the validity bitstring), assigned at creation and freed on deletion.  The
+/// `UNIQUE` constraint guarantees no two live versions share a slot, and the
+/// 0–63 range is what makes the 64-version concurrency limit a hard, reclaimable
+/// boundary rather than an unbounded function of the auto-increment id.
+fn migration_v4(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS kg_versions (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            name        TEXT NOT NULL UNIQUE,
+            branch      TEXT NOT NULL DEFAULT 'main',
+            parent_id   INTEGER REFERENCES kg_versions(id) ON DELETE SET NULL,
+            description TEXT,
+            created_at  INTEGER DEFAULT (strftime('%s', 'now')),
+            is_merged   INTEGER NOT NULL DEFAULT 0,
+            bit_slot    INTEGER NOT NULL UNIQUE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_versions_branch ON kg_versions(branch);
+        CREATE INDEX IF NOT EXISTS idx_versions_parent ON kg_versions(parent_id);
+
+        ALTER TABLE kg_entities ADD COLUMN validity INTEGER DEFAULT NULL;
+        ALTER TABLE kg_relations ADD COLUMN validity INTEGER DEFAULT NULL;
+    "#,
+    )?;
+    Ok(())
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Tests
 // ─────────────────────────────────────────────────────────────────────────────
@@ -318,6 +357,7 @@ mod tests {
             "kg_hyperedge_entities",
             "kg_turboquant_cache",
             "kg_schema_version",
+            "kg_versions",
             "kg_dependencies",
             "kg_confidence_log",
         ];
@@ -390,5 +430,72 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         create_schema(&conn).unwrap();
         assert_eq!(schema_version(&conn).unwrap(), Some(CURRENT_SCHEMA_VERSION));
+    }
+
+    #[test]
+    fn test_v4_validity_columns_exist() {
+        let conn = Connection::open_in_memory().unwrap();
+        ensure_schema(&conn).unwrap();
+
+        // Verify validity column on kg_entities (NULL by default)
+        conn.execute(
+            "INSERT INTO kg_entities (entity_type, name) VALUES ('test', 'V')",
+            [],
+        )
+        .unwrap();
+        let validity: Option<i64> = conn
+            .query_row(
+                "SELECT validity FROM kg_entities WHERE name = 'V'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(validity, None);
+
+        // Verify validity column on kg_relations
+        let eid: i64 = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO kg_entities (entity_type, name) VALUES ('test', 'V2')",
+            [],
+        )
+        .unwrap();
+        let eid2: i64 = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO kg_relations (source_id, target_id, rel_type) VALUES (?1, ?2, 'rel')",
+            rusqlite::params![eid, eid2],
+        )
+        .unwrap();
+        let rel_validity: Option<i64> = conn
+            .query_row(
+                "SELECT validity FROM kg_relations WHERE source_id = ?1",
+                [eid],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(rel_validity, None);
+    }
+
+    #[test]
+    fn test_v4_versions_table_writable() {
+        let conn = Connection::open_in_memory().unwrap();
+        ensure_schema(&conn).unwrap();
+
+        conn.execute(
+            "INSERT INTO kg_versions (name, branch, description, bit_slot) \
+             VALUES ('v1', 'main', 'first', 0)",
+            [],
+        )
+        .unwrap();
+
+        let (name, branch, desc): (String, String, Option<String>) = conn
+            .query_row(
+                "SELECT name, branch, description FROM kg_versions WHERE name = 'v1'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(name, "v1");
+        assert_eq!(branch, "main");
+        assert_eq!(desc.as_deref(), Some("first"));
     }
 }

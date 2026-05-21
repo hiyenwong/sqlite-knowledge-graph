@@ -28,6 +28,7 @@ pub mod migrate;
 pub mod rag;
 pub mod schema;
 pub mod vector;
+pub mod version;
 
 #[cfg(feature = "async")]
 pub mod async_kg;
@@ -90,6 +91,7 @@ pub use schema::{create_schema, schema_exists};
 pub use vector::{cosine_similarity, SearchResult, VectorStore};
 pub use vector::{ConfidenceEngine, ConfidenceParams};
 pub use vector::{TurboQuantConfig, TurboQuantIndex, TurboQuantStats};
+pub use version::{MergeStrategy, Version, VersionDiff};
 
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
@@ -465,6 +467,108 @@ impl KnowledgeGraph {
         }
 
         Ok(entities_with_results)
+    }
+
+    // ========== QuaQue Versioning ==========
+
+    /// Create a new named version (snapshot point).
+    pub fn version_create(
+        &self,
+        name: &str,
+        branch: &str,
+        parent_id: Option<i64>,
+        description: Option<&str>,
+    ) -> Result<i64> {
+        version::store::create_version(&self.conn, name, branch, parent_id, description)
+    }
+
+    /// Delete a version by ID.
+    pub fn version_delete(&self, version_id: i64) -> Result<()> {
+        version::store::delete_version(&self.conn, version_id)
+    }
+
+    /// List versions, optionally filtered by branch.
+    pub fn version_list(&self, branch: Option<&str>) -> Result<Vec<Version>> {
+        version::store::list_versions(&self.conn, branch)
+    }
+
+    /// Add an entity to a version.
+    pub fn version_add_entity(&self, version_id: i64, entity_id: i64) -> Result<()> {
+        version::snapshot::version_add_entity(&self.conn, version_id, entity_id)
+    }
+
+    /// Remove an entity from a version.
+    pub fn version_remove_entity(&self, version_id: i64, entity_id: i64) -> Result<()> {
+        version::snapshot::version_remove_entity(&self.conn, version_id, entity_id)
+    }
+
+    /// Add a relation to a version.
+    pub fn version_add_relation(&self, version_id: i64, relation_id: i64) -> Result<()> {
+        version::snapshot::version_add_relation(&self.conn, version_id, relation_id)
+    }
+
+    /// Remove a relation from a version.
+    pub fn version_remove_relation(&self, version_id: i64, relation_id: i64) -> Result<()> {
+        version::snapshot::version_remove_relation(&self.conn, version_id, relation_id)
+    }
+
+    /// Snapshot all entities into a version.
+    pub fn version_snapshot_entities(&self, version_id: i64) -> Result<()> {
+        version::snapshot::version_snapshot_entities(&self.conn, version_id)
+    }
+
+    /// Snapshot all relations into a version.
+    pub fn version_snapshot_relations(&self, version_id: i64) -> Result<()> {
+        version::snapshot::version_snapshot_relations(&self.conn, version_id)
+    }
+
+    /// Get entities in a specific version.
+    pub fn version_entities(
+        &self,
+        version_id: i64,
+        entity_type: Option<&str>,
+        limit: Option<i64>,
+    ) -> Result<Vec<Entity>> {
+        version::query::version_entities(&self.conn, version_id, entity_type, limit)
+    }
+
+    /// Get relations in a specific version.
+    pub fn version_relations(
+        &self,
+        version_id: i64,
+        rel_type: Option<&str>,
+    ) -> Result<Vec<Relation>> {
+        version::query::version_relations(&self.conn, version_id, rel_type, None, None, None)
+    }
+
+    /// Get neighbors of an entity in a specific version.
+    pub fn version_neighbors(
+        &self,
+        entity_id: i64,
+        version_id: i64,
+        depth: u32,
+    ) -> Result<Vec<Neighbor>> {
+        version::query::version_neighbors(&self.conn, entity_id, version_id, depth)
+    }
+
+    /// Compare two versions.
+    pub fn version_compare(&self, v1_id: i64, v2_id: i64) -> Result<VersionDiff> {
+        version::diff::version_compare(&self.conn, v1_id, v2_id)
+    }
+
+    /// Get all versions containing a given entity.
+    pub fn version_entity_history(&self, entity_id: i64) -> Result<Vec<Version>> {
+        version::diff::version_entity_history(&self.conn, entity_id)
+    }
+
+    /// Merge two or more versions into a new version.
+    pub fn version_merge(
+        &self,
+        source_ids: &[i64],
+        target_name: &str,
+        strategy: MergeStrategy,
+    ) -> Result<i64> {
+        version::merge::version_merge(&self.conn, source_ids, target_name, strategy)
     }
 
     /// Get context around an entity using graph traversal.
