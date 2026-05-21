@@ -134,7 +134,7 @@ pub fn list_versions(conn: &rusqlite::Connection, branch: Option<&str>) -> Resul
     Ok(versions)
 }
 
-/// Get a version by ID. Returns None if not found.
+/// Get a version by ID. Returns [`Error::VersionNotFound`] if no such version exists.
 pub fn get_version(conn: &rusqlite::Connection, version_id: i64) -> Result<Version> {
     conn.query_row(
         "SELECT id, name, branch, parent_id, description, created_at, is_merged \
